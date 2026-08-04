@@ -1,75 +1,77 @@
 # Infrastructure
 
-Los adaptadores: todo lo que conecta el dominio/aplicación con el mundo exterior (base de datos, HTTP, UI, servicios externos). Es la única capa que puede depender de Laravel.
+The adapters: everything that connects the domain/application to the outside world (database, HTTP, UI, external services). The only layer allowed to depend on Laravel.
 
-## Estructura
+## Structure
 
 ```
 app/Infrastructure/
 ├── Persistence/
-│   └── Eloquent/<Modulo>/
-│       ├── Models/        # Modelos Eloquent (detalle de infraestructura, no el dominio)
-│       └── Repositories/   # Implementan las interfaces de app/Domain/<Modulo>/Repositories
+│   └── Eloquent/<Module>/
+│       ├── Models/        # Eloquent models (an infrastructure detail, not the domain)
+│       └── Repositories/   # Implement the interfaces from app/Domain/<Module>/Repositories
 ├── Http/
-│   └── Controllers/<Modulo>/   # Controladores, si el módulo expone una API
+│   └── Controllers/<Module>/   # Controllers, if the module exposes an API
 └── Providers/
-    └── DomainServiceProvider.php   # Bindings interfaz -> implementación
+    └── DomainServiceProvider.php   # Interface -> implementation bindings
 ```
 
-## Adaptadores que ya existen en el proyecto (no se mueven)
+## Adapters that already exist in the project (do not move)
 
-- `app/Http/Controllers` y `resources/views/pages/**` (componentes Livewire de un solo archivo) son también adaptadores de entrada — así los usa Laravel/Livewire por convención y así deben quedarse. Los del scaffold de autenticación (Fortify, login, 2FA, passkeys, perfil) no se tocan.
-- `app/Models/User.php` es infraestructura ligada a la autenticación (Fortify, `config/auth.php`, `PasskeyAuthenticatable`, etc.) y se queda donde está.
+- `app/Http/Controllers` and `resources/views/pages/**` (single-file Livewire components) are also entry adapters — that's how Laravel/Livewire use them by convention, and that's where they stay. The authentication scaffold's own (Fortify, login, 2FA, passkeys, profile) are not touched.
+- `app/Models/User.php` is infrastructure tied to authentication (Fortify, `config/auth.php`, `PasskeyAuthenticatable`, etc.) and stays where it is.
 
-## Convención para módulos de negocio nuevos
+## Convention for new business modules
 
-Los modelos Eloquent y repositorios concretos de **tus** módulos (los que tú vas a crear) van bajo `Persistence/Eloquent/<Modulo>`, no en `app/Models`. El repositorio Eloquent traduce entre el modelo Eloquent y la entidad de dominio; el resto de la app nunca ve el modelo Eloquent directamente, solo la entidad.
+The Eloquent models and concrete repositories for **your** modules (the ones you're going to build) go under `Persistence/Eloquent/<Module>`, not in `app/Models`. The Eloquent repository translates between the Eloquent model and the domain entity; the rest of the app never sees the Eloquent model directly, only the entity.
 
-## Ejemplo (referencial, no implementado)
+## Example (referential, not implemented)
 
 ```php
-// app/Infrastructure/Persistence/Eloquent/Estudiantes/Models/EstudianteModel.php
-namespace App\Infrastructure\Persistence\Eloquent\Estudiantes\Models;
+// app/Infrastructure/Persistence/Eloquent/Students/Models/StudentModel.php
+namespace App\Infrastructure\Persistence\Eloquent\Students\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class EstudianteModel extends Model
+class StudentModel extends Model
 {
     protected $table = 'estudiantes';
-    protected $fillable = ['carnet', 'nombre', 'activo'];
+    protected $fillable = ['cedula', 'nombre', 'primer_apellido', 'segundo_apellido', 'activo'];
 }
 
-// app/Infrastructure/Persistence/Eloquent/Estudiantes/Repositories/EloquentEstudianteRepository.php
-namespace App\Infrastructure\Persistence\Eloquent\Estudiantes\Repositories;
+// app/Infrastructure/Persistence/Eloquent/Students/Repositories/EloquentStudentRepository.php
+namespace App\Infrastructure\Persistence\Eloquent\Students\Repositories;
 
-use App\Domain\Estudiantes\Entities\Estudiante;
-use App\Domain\Estudiantes\Repositories\EstudianteRepository;
-use App\Infrastructure\Persistence\Eloquent\Estudiantes\Models\EstudianteModel;
+use App\Domain\Students\Entities\Student;
+use App\Domain\Students\Repositories\StudentRepository;
+use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
 
-class EloquentEstudianteRepository implements EstudianteRepository
+class EloquentStudentRepository implements StudentRepository
 {
-    public function findById(int $id): ?Estudiante
+    public function findById(int $id): ?Student
     {
-        $model = EstudianteModel::find($id);
+        $model = StudentModel::find($id);
 
-        return $model ? new Estudiante($model->id, $model->carnet, $model->nombre, $model->activo) : null;
+        return $model ? new Student($model->id, $model->cedula, $model->nombre, $model->activo) : null;
     }
 
-    public function save(Estudiante $estudiante): void
+    public function save(Student $student): void
     {
-        EstudianteModel::updateOrCreate(
-            ['id' => $estudiante->id],
-            ['carnet' => $estudiante->carnet, 'nombre' => $estudiante->nombre, 'activo' => $estudiante->activo],
+        StudentModel::updateOrCreate(
+            ['id' => $student->id],
+            ['cedula' => $student->studentId, 'nombre' => $student->name, 'activo' => $student->active],
         );
     }
 }
 ```
 
-Luego se registra el binding en `DomainServiceProvider`:
+Note the boundary crossing here: the Eloquent model's columns (`cedula`, `nombre`, `activo`) match the official Spanish database schema, but the Domain entity's properties (`studentId`, `name`, `active`) are plain English PHP identifiers — the repository is exactly the translation point between the two, so the Domain layer never has to know the real column names.
+
+The binding is then registered in `DomainServiceProvider`:
 
 ```php
 protected array $repositoryBindings = [
-    \App\Domain\Estudiantes\Repositories\EstudianteRepository::class =>
-        \App\Infrastructure\Persistence\Eloquent\Estudiantes\Repositories\EloquentEstudianteRepository::class,
+    \App\Domain\Students\Repositories\StudentRepository::class =>
+        \App\Infrastructure\Persistence\Eloquent\Students\Repositories\EloquentStudentRepository::class,
 ];
 ```

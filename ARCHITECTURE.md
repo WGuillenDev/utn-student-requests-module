@@ -1,49 +1,49 @@
-# Arquitectura hexagonal
+# Hexagonal Architecture
 
-Este proyecto es un Laravel 13 + Livewire 4 + Fortify estándar (starter kit oficial `laravel/livewire-starter-kit`), organizado con una capa de dominio separada del framework siguiendo el patrón de puertos y adaptadores (arquitectura hexagonal).
+This project is a standard Laravel 13 + Livewire 4 + Fortify app (official `laravel/livewire-starter-kit`), organized with a domain layer decoupled from the framework, following the Ports & Adapters (hexagonal architecture) pattern.
 
-## Capas
+## Layers
 
 ```
 app/
-├── Domain/            Reglas de negocio puras. Sin Laravel. Ver app/Domain/README.md
-├── Application/        Casos de uso, orquestan el Domain. Ver app/Application/README.md
-├── Infrastructure/      Adaptadores: Eloquent, providers de bindings. Ver app/Infrastructure/README.md
-├── Http/Controllers/    Adaptador de entrada HTTP (convención estándar de Laravel, no se mueve)
-├── Livewire/            Acciones Livewire puntuales (ej. Logout) del scaffold de autenticación
-├── Models/              Solo el modelo User (framework/autenticación vía Fortify)
-└── Providers/            Providers propios del scaffold (AppServiceProvider, FortifyServiceProvider)
+├── Domain/            Pure business rules. No Laravel. See app/Domain/README.md
+├── Application/        Use cases, orchestrate the Domain. See app/Application/README.md
+├── Infrastructure/      Adapters: Eloquent, binding providers. See app/Infrastructure/README.md
+├── Http/Controllers/    HTTP entry adapter (standard Laravel convention, not moved)
+├── Livewire/            One-off Livewire actions (e.g. Logout) from the auth scaffold
+├── Models/              Only the User model (framework/authentication via Fortify)
+└── Providers/            Scaffold-owned providers (AppServiceProvider, FortifyServiceProvider)
 
-resources/views/pages/    Componentes Livewire de un solo archivo (adaptador de entrada de UI)
+resources/views/pages/    Single-file Livewire components (UI entry adapter)
 ```
 
-## Regla de dependencias
+## Dependency rule
 
 ```
 Infrastructure  →  Application  →  Domain
-     (nada apunta hacia Infrastructure; Domain no apunta hacia nada)
+     (nothing points to Infrastructure; Domain points to nothing)
 ```
 
-- **Domain** no importa nada de `Illuminate\*` ni de ninguna otra capa.
-- **Application** solo importa de `Domain` (entidades, value objects, interfaces de repositorio).
-- **Infrastructure** importa de `Application` y `Domain` para implementarlos (repositorios Eloquent, controladores, componentes Livewire), nunca al revés.
-- Los componentes Livewire (`resources/views/pages/...`) y los controladores HTTP son adaptadores de entrada: reciben la petición, arman un DTO, invocan un caso de uso de `Application` y renderizan el resultado. No deben contener lógica de negocio ni tocar Eloquent directamente.
+- **Domain** imports nothing from `Illuminate\*` or any other layer.
+- **Application** only imports from `Domain` (entities, value objects, repository interfaces).
+- **Infrastructure** imports from `Application` and `Domain` to implement them (Eloquent repositories, controllers, Livewire components), never the other way around.
+- Livewire components (`resources/views/pages/...`) and HTTP controllers are entry adapters: they receive the request, build a DTO, invoke an `Application` use case, and render the result. They must never contain business logic or touch Eloquent directly.
 
-## Cómo agregar un módulo nuevo
+## How to add a new module
 
-Ejemplo con un hipotético módulo `Solicitudes` (una solicitud estudiantil):
+Example with a hypothetical `Requests` module (a student request):
 
-1. `app/Domain/Solicitudes/` — entidad `Solicitud`, value objects, interfaz `SolicitudRepository`.
-2. `app/Application/Solicitudes/` — casos de uso (`CrearSolicitud`, `AprobarSolicitud`, `ListarSolicitudes`) + DTOs.
-3. `app/Infrastructure/Persistence/Eloquent/Solicitudes/` — `Models/SolicitudModel.php` + `Repositories/EloquentSolicitudRepository.php` (implementa la interfaz del paso 1).
-4. Migración en `database/migrations/` como de costumbre (Eloquent sigue siendo el ORM, solo que el modelo vive en `Infrastructure`, no en `app/Models`).
-5. Registrar el binding `SolicitudRepository::class => EloquentSolicitudRepository::class` en `app/Infrastructure/Providers/DomainServiceProvider.php`.
-6. Adaptador de entrada:
-   - Livewire: `resources/views/pages/solicitudes/⚡index.blade.php`, inyecta los casos de uso del paso 2 (no el repositorio ni el modelo directamente).
-   - o API: `app/Infrastructure/Http/Controllers/Solicitudes/SolicitudController.php` + ruta en `routes/web.php` o `routes/api.php`.
+1. `app/Domain/Requests/` — `Request` entity, value objects, `RequestRepository` interface.
+2. `app/Application/Requests/` — use cases (`CreateRequest`, `ApproveRequest`, `ListRequests`) + DTOs.
+3. `app/Infrastructure/Persistence/Eloquent/Requests/` — `Models/RequestModel.php` + `Repositories/EloquentRequestRepository.php` (implements the step-1 interface).
+4. Migration under `database/migrations/` as usual (Eloquent is still the ORM — the model just lives in `Infrastructure`, not `app/Models`).
+5. Register the binding `RequestRepository::class => EloquentRequestRepository::class` in `app/Infrastructure/Providers/DomainServiceProvider.php`.
+6. Entry adapter:
+   - Livewire: `resources/views/pages/requests/⚡index.blade.php`, injects the step-2 use cases (never the repository or model directly).
+   - or API: `app/Infrastructure/Http/Controllers/Requests/RequestController.php` + a route in `routes/web.php` or `routes/api.php`.
 
-Cada capa tiene su propio `README.md` con más detalle y un ejemplo completo (no funcional, solo referencial) de este mismo módulo de ejemplo.
+Each layer has its own `README.md` with more detail and a full (non-functional, referential-only) example for this same sample module.
 
-## Lo que NO se tocó
+## What was NOT touched
 
-El scaffold de autenticación (Fortify, 2FA, passkeys, perfil, apariencia) se dejó tal cual lo genera `laravel/livewire-starter-kit`, en sus ubicaciones estándar de Laravel (`app/Models/User`, `app/Providers/FortifyServiceProvider`, `app/Actions/Fortify`, `resources/views/pages/auth` y `resources/views/pages/settings`). Es infraestructura de autenticación ya resuelta por el starter kit; no forma parte del dominio de negocio que vas a modelar.
+The authentication scaffold (Fortify, 2FA, passkeys, profile, appearance) was left exactly as `laravel/livewire-starter-kit` generates it, in its standard Laravel locations (`app/Models/User`, `app/Providers/FortifyServiceProvider`, `app/Actions/Fortify`, `resources/views/pages/auth`, and `resources/views/pages/settings`). It's authentication infrastructure already solved by the starter kit — it isn't part of the business domain you're modeling.

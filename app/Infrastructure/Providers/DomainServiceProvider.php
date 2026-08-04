@@ -7,10 +7,10 @@ use Illuminate\Support\ServiceProvider;
 class DomainServiceProvider extends ServiceProvider
 {
     /**
-     * Interfaz de dominio => implementación de infraestructura.
+     * Domain interface => infrastructure implementation.
      *
-     * \App\Domain\Estudiantes\Repositories\EstudianteRepository::class =>
-     *     \App\Infrastructure\Persistence\Eloquent\Estudiantes\Repositories\EloquentEstudianteRepository::class,
+     * \App\Domain\Students\Repositories\StudentRepository::class =>
+     *     \App\Infrastructure\Persistence\Eloquent\Students\Repositories\EloquentStudentRepository::class,
      */
     protected array $repositoryBindings = [
         //

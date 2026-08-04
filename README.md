@@ -55,7 +55,7 @@ Developed for **Programación en Ambiente Web I (ISW-521)**, Universidad Técnic
 
 ## Project Status
 
-🚧 **In progress.** The hexagonal architecture scaffold (Domain / Application / Infrastructure layers) and the authentication baseline (Fortify, 2FA, passkeys) are in place. Database migrations, Eloquent models, domain entities, and the ES-01–ES-04 use cases are under active development.
+🚧 **In progress.** Done so far: the hexagonal architecture scaffold, the authentication baseline (Fortify, 2FA, passkeys), all database migrations (auth, RBAC, academic catalog, and the ES-01–ES-04 core tables), seeders, Eloquent models, and model factories. Still pending: Domain entities/value objects, Application use cases, `DomainServiceProvider` bindings, TypeScript, JWT-secured endpoints, the external REST API integration, and automated tests.
 
 ## Author
 

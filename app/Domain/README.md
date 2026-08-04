@@ -1,50 +1,50 @@
 # Domain
 
-Capa de reglas de negocio puras. No depende de Laravel ni de ninguna otra capa.
+Layer of pure business rules. Depends on neither Laravel nor any other layer.
 
-## Convención por módulo
+## Convention per module
 
 ```
-app/Domain/<Modulo>/
-├── Entities/         # Entidades / agregados (clases PHP planas, sin Eloquent)
-├── ValueObjects/      # Objetos de valor inmutables (Email, Carnet, etc.)
-├── Repositories/       # Interfaces de repositorio (puertos de salida)
-├── Services/          # Servicios de dominio (lógica que no pertenece a una sola entidad)
-├── Events/            # Eventos de dominio
-└── Exceptions/        # Excepciones propias del dominio
+app/Domain/<Module>/
+├── Entities/         # Entities / aggregates (plain PHP classes, no Eloquent)
+├── ValueObjects/      # Immutable value objects (Email, StudentId, etc.)
+├── Repositories/       # Repository interfaces (outbound ports)
+├── Services/          # Domain services (logic that doesn't belong to a single entity)
+├── Events/            # Domain events
+└── Exceptions/        # Domain-specific exceptions
 ```
 
-## Reglas
+## Rules
 
-- Cero `use Illuminate\...`. Nada de Eloquent, Facades, Request, etc. aquí.
-- Las entidades no conocen la base de datos: no tienen `save()`, `find()`, ni casts de Eloquent.
-- Los repositorios se definen aquí como **interfaces** (el "puerto"); la implementación con Eloquent vive en `app/Infrastructure/Persistence`.
-- Si una regla de negocio se puede probar sin arrancar Laravel, pertenece a esta capa.
+- Zero `use Illuminate\...`. No Eloquent, Facades, Request, etc. here.
+- Entities know nothing about the database: no `save()`, no `find()`, no Eloquent casts.
+- Repositories are defined here as **interfaces** (the "port"); the Eloquent implementation lives in `app/Infrastructure/Persistence`.
+- If a business rule can be tested without booting Laravel, it belongs in this layer.
 
-## Ejemplo (referencial, no implementado)
+## Example (referential, not implemented)
 
 ```php
-// app/Domain/Estudiantes/Entities/Estudiante.php
-namespace App\Domain\Estudiantes\Entities;
+// app/Domain/Students/Entities/Student.php
+namespace App\Domain\Students\Entities;
 
-final class Estudiante
+final class Student
 {
     public function __construct(
         public readonly ?int $id,
-        public readonly string $carnet,
-        public readonly string $nombre,
-        public readonly bool $activo,
+        public readonly string $studentId,
+        public readonly string $name,
+        public readonly bool $active,
     ) {}
 }
 
-// app/Domain/Estudiantes/Repositories/EstudianteRepository.php
-namespace App\Domain\Estudiantes\Repositories;
+// app/Domain/Students/Repositories/StudentRepository.php
+namespace App\Domain\Students\Repositories;
 
-use App\Domain\Estudiantes\Entities\Estudiante;
+use App\Domain\Students\Entities\Student;
 
-interface EstudianteRepository
+interface StudentRepository
 {
-    public function findById(int $id): ?Estudiante;
-    public function save(Estudiante $estudiante): void;
+    public function findById(int $id): ?Student;
+    public function save(Student $student): void;
 }
 ```

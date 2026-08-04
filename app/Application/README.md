@@ -1,45 +1,45 @@
 # Application
 
-Orquesta los casos de uso del sistema. Depende de `Domain`, nunca al revés. No sabe si quien la invoca es un componente Livewire, un controlador API o un comando de consola.
+Orchestrates the system's use cases. Depends on `Domain`, never the other way around. It doesn't know whether the caller is a Livewire component, an API controller, or a console command.
 
-## Convención por módulo
+## Convention per module
 
 ```
-app/Application/<Modulo>/
-├── UseCases/    # Una clase por caso de uso (ej: CrearEstudiante, ListarEstudiantes)
-└── DTOs/         # Objetos de transferencia de datos de entrada/salida de los casos de uso
+app/Application/<Module>/
+├── UseCases/    # One class per use case (e.g. CreateStudent, ListStudents)
+└── DTOs/         # Input/output data transfer objects for the use cases
 ```
 
-## Reglas
+## Rules
 
-- Un caso de uso = una acción del negocio, con un único método público (`handle()` o `__invoke()`).
-- Recibe y devuelve DTOs propios de esta capa, nunca modelos Eloquent ni Request de Laravel.
-- Depende de las **interfaces** de repositorio definidas en `Domain`, resueltas por inyección de dependencias (el binding concreto se registra en `app/Infrastructure/Providers/DomainServiceProvider.php`).
+- One use case = one business action, with a single public method (`handle()` or `__invoke()`).
+- Receives and returns this layer's own DTOs, never Eloquent models or Laravel's `Request`.
+- Depends on the repository **interfaces** defined in `Domain`, resolved via dependency injection (the concrete binding is registered in `app/Infrastructure/Providers/DomainServiceProvider.php`).
 
-## Ejemplo (referencial, no implementado)
+## Example (referential, not implemented)
 
 ```php
-// app/Application/Estudiantes/UseCases/CrearEstudiante.php
-namespace App\Application\Estudiantes\UseCases;
+// app/Application/Students/UseCases/CreateStudent.php
+namespace App\Application\Students\UseCases;
 
-use App\Domain\Estudiantes\Entities\Estudiante;
-use App\Domain\Estudiantes\Repositories\EstudianteRepository;
+use App\Domain\Students\Entities\Student;
+use App\Domain\Students\Repositories\StudentRepository;
 
-final class CrearEstudiante
+final class CreateStudent
 {
     public function __construct(
-        private readonly EstudianteRepository $estudiantes,
+        private readonly StudentRepository $students,
     ) {}
 
-    public function handle(CrearEstudianteDTO $dto): Estudiante
+    public function handle(CreateStudentDTO $dto): Student
     {
-        $estudiante = new Estudiante(null, $dto->carnet, $dto->nombre, activo: true);
+        $student = new Student(null, $dto->studentId, $dto->name, active: true);
 
-        $this->estudiantes->save($estudiante);
+        $this->students->save($student);
 
-        return $estudiante;
+        return $student;
     }
 }
 ```
 
-El adaptador de entrada (controlador o componente Livewire) construye el DTO a partir del `Request`/formulario y llama al caso de uso; nunca contiene lógica de negocio.
+The entry adapter (a controller or Livewire component) builds the DTO from the `Request`/form and calls the use case; it never contains business logic.
