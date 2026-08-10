@@ -17,28 +17,28 @@ class CourseModel extends Model
         return CourseFactory::new();
     }
 
-    protected $table = 'cursos';
+    protected $table = 'courses';
 
     protected $fillable = [
-        'carrera_id', 'codigo', 'nombre', 'es_servicio', 'es_cuello_botella',
-        'requiere_laboratorio', 'tipo_laboratorio', 'activo',
+        'career_id', 'code', 'name', 'is_service', 'is_bottleneck',
+        'requires_lab', 'lab_type', 'active',
     ];
 
     protected $casts = [
-        'es_servicio' => 'boolean',
-        'es_cuello_botella' => 'boolean',
-        'requiere_laboratorio' => 'boolean',
-        'activo' => 'boolean',
+        'is_service' => 'boolean',
+        'is_bottleneck' => 'boolean',
+        'requires_lab' => 'boolean',
+        'active' => 'boolean',
     ];
 
     public function career(): BelongsTo
     {
-        return $this->belongsTo(CareerModel::class, 'carrera_id');
+        return $this->belongsTo(CareerModel::class, 'career_id');
     }
 
     public function levels(): BelongsToMany
     {
-        return $this->belongsToMany(LevelModel::class, 'curso_nivel', 'curso_id', 'nivel_id')
-            ->withPivot('creditos');
+        return $this->belongsToMany(LevelModel::class, 'course_level', 'course_id', 'level_id')
+            ->withPivot('credits');
     }
 }

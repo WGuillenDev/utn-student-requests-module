@@ -16,21 +16,21 @@ class CareerModel extends Model
         return CareerFactory::new();
     }
 
-    protected $table = 'carreras';
+    protected $table = 'careers';
 
-    protected $fillable = ['nombre', 'activa'];
+    protected $fillable = ['name', 'active'];
 
     protected $casts = [
-        'activa' => 'boolean',
+        'active' => 'boolean',
     ];
 
     public function courses(): HasMany
     {
-        return $this->hasMany(CourseModel::class, 'carrera_id');
+        return $this->hasMany(CourseModel::class, 'career_id');
     }
 
     public function studyPlans(): HasMany
     {
-        return $this->hasMany(StudyPlanModel::class, 'carrera_id');
+        return $this->hasMany(StudyPlanModel::class, 'career_id');
     }
 }

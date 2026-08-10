@@ -15,8 +15,8 @@ class CareerFactory extends Factory
     public function definition(): array
     {
         return [
-            'nombre' => fake()->unique()->words(4, true),
-            'activa' => true,
+            'name' => fake()->unique()->words(4, true),
+            'active' => true,
         ];
     }
 }

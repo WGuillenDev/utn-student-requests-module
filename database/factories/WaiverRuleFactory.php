@@ -16,13 +16,13 @@ class WaiverRuleFactory extends Factory
     public function definition(): array
     {
         return [
-            'curso_id' => CourseModel::factory(),
-            'orden' => 1,
-            'tipo' => 'Siempre revisión manual',
-            'curso_requisito_id' => null,
-            'nota_minima' => null,
-            'minimo_acumulado' => null,
-            'activo' => true,
+            'course_id' => CourseModel::factory(),
+            'order' => 1,
+            'type' => 'Always manual review',
+            'required_course_id' => null,
+            'minimum_grade' => null,
+            'minimum_accumulated' => null,
+            'active' => true,
         ];
     }
 
@@ -30,9 +30,9 @@ class WaiverRuleFactory extends Factory
     public function requiredCourseWithMinimumGrade(?CourseModel $requiredCourse = null, float $minimumGrade = 70): static
     {
         return $this->state(fn (array $attributes) => [
-            'tipo' => 'Requisito aprobado con nota mínima',
-            'curso_requisito_id' => $requiredCourse?->id ?? CourseModel::factory(),
-            'nota_minima' => $minimumGrade,
+            'type' => 'Approved requirement with minimum grade',
+            'required_course_id' => $requiredCourse?->id ?? CourseModel::factory(),
+            'minimum_grade' => $minimumGrade,
         ]);
     }
 
@@ -40,8 +40,8 @@ class WaiverRuleFactory extends Factory
     public function accumulatedCredits(int $minimum = 60): static
     {
         return $this->state(fn (array $attributes) => [
-            'tipo' => 'Créditos o cursos acumulados',
-            'minimo_acumulado' => $minimum,
+            'type' => 'Accumulated credits or courses',
+            'minimum_accumulated' => $minimum,
         ]);
     }
 
@@ -49,7 +49,7 @@ class WaiverRuleFactory extends Factory
     public function terminalPlan(): static
     {
         return $this->state(fn (array $attributes) => [
-            'tipo' => 'Pertenencia a plan terminal',
+            'type' => 'Terminal plan membership',
         ]);
     }
 }

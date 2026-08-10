@@ -18,28 +18,28 @@ class AcademicRecordModel extends Model
         return AcademicRecordFactory::new();
     }
 
-    protected $table = 'historial_academico';
+    protected $table = 'academic_records';
 
     protected $fillable = [
-        'estudiante_id', 'curso_id', 'periodo_academico_id', 'estado', 'nota', 'equiparacion_id',
+        'student_id', 'course_id', 'academic_period_id', 'status', 'grade', 'equivalence_id',
     ];
 
     protected $casts = [
-        'nota' => 'decimal:2',
+        'grade' => 'decimal:2',
     ];
 
     public function student(): BelongsTo
     {
-        return $this->belongsTo(StudentModel::class, 'estudiante_id');
+        return $this->belongsTo(StudentModel::class, 'student_id');
     }
 
     public function course(): BelongsTo
     {
-        return $this->belongsTo(CourseModel::class, 'curso_id');
+        return $this->belongsTo(CourseModel::class, 'course_id');
     }
 
     public function academicPeriod(): BelongsTo
     {
-        return $this->belongsTo(AcademicPeriodModel::class, 'periodo_academico_id');
+        return $this->belongsTo(AcademicPeriodModel::class, 'academic_period_id');
     }
 }

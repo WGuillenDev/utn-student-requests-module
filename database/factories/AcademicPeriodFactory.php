@@ -18,10 +18,10 @@ class AcademicPeriodFactory extends Factory
         $term = fake()->numberBetween(1, 3);
 
         return [
-            'anio' => $year,
-            'cuatrimestre' => $term,
-            'fecha_inicio' => "{$year}-01-01",
-            'fecha_fin' => "{$year}-04-30",
+            'year' => $year,
+            'term' => $term,
+            'start_date' => "{$year}-01-01",
+            'end_date' => "{$year}-04-30",
         ];
     }
 }

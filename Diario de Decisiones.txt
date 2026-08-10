@@ -1,0 +1,33 @@
+Entrada — Adaptación del proyecto a los requisitos técnicos
+
+Fecha: 10/8/26
+
+Objetivo de la consulta:
+Se proporcionó a la IA el archivo SIGA-UTN.zip junto con el enunciado del proyecto y el proyecto que ya teníamos con el modulo de solicitudes, solicitando modificar la aplicación existente para que cumpliera con todos los requisitos técnicos establecidos que no se encontraban implementados.
+
+Consulta realizada a la IA:
+Se solicitó modificar el archivo .zip para cumplir con el enunciado, incluyendo obligatoriamente:
+
+Framework TALL Stack: Tailwind CSS, Alpine.js, Laravel y Livewire.
+Consumo de al menos una API REST externa.
+Autenticación JWT.
+Uso de variables de entorno.
+Pruebas unitarias básicas.
+Repositorio Git documentado, con historial de commits y README con instrucciones de instalación.
+Organización de la lógica de dominio mediante Arquitectura Hexagonal (Ports & Adapters) y Domain-Driven Design (DDD).
+Mantener el dominio independiente de Laravel, Livewire y Alpine.js.
+
+Decisión del equipo:
+Se decidió utilizar la IA como apoyo para realizar la adaptación inicial del proyecto, pero las modificaciones debían ser revisadas posteriormente por el equipo para comprobar que realmente cumplieran los requisitos del enunciado.
+
+Criterio técnico utilizado:
+Se consideró especialmente importante verificar que la implementación de Arquitectura Hexagonal fuera real y no solamente una separación de archivos o carpetas. El dominio debía permanecer independiente de las tecnologías del framework, de manera que eliminar Laravel no provocara que la lógica de dominio dejara de ser compilable.
+
+Resultado de la interacción con la IA:
+La IA realizó correctamente la solicitud planteada. No modificó archivos que no fueran necesarios para cumplir con los requisitos solicitados y agregó exitosamente el módulo de Solicitudes de Estudiantes al proyecto base SIGA-UTN proporcionado por el docente.
+
+
+Entrada — Creación de los CRUD's correspondientes al modulo de Solicitudes estudiantiles
+
+Fecha: 10/8/26
+

@@ -17,7 +17,7 @@ class RequestStatusHistoryModel extends Model
         return RequestStatusHistoryFactory::new();
     }
 
-    protected $table = 'solicitud_estados_historial';
+    protected $table = 'request_status_history';
 
     /**
      * This table only has `created_at` (a point-in-time event, never "updated").
@@ -25,16 +25,16 @@ class RequestStatusHistoryModel extends Model
     const UPDATED_AT = null;
 
     protected $fillable = [
-        'solicitud_id', 'estado_anterior', 'estado_nuevo', 'comentario', 'user_id', 'notificado_at',
+        'request_id', 'previous_status', 'new_status', 'comment', 'user_id', 'notified_at',
     ];
 
     protected $casts = [
-        'notificado_at' => 'datetime',
+        'notified_at' => 'datetime',
     ];
 
     public function request(): BelongsTo
     {
-        return $this->belongsTo(RequestModel::class, 'solicitud_id');
+        return $this->belongsTo(RequestModel::class, 'request_id');
     }
 
     public function user(): BelongsTo

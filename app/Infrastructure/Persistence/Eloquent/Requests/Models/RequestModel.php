@@ -20,51 +20,51 @@ class RequestModel extends Model
         return RequestFactory::new();
     }
 
-    protected $table = 'solicitudes';
+    protected $table = 'requests';
 
     protected $fillable = [
-        'estudiante_id', 'tipo', 'curso_id', 'curso_requisito_id',
-        'institucion_origen', 'curso_externo', 'convalidacion_historica_id',
-        'resultado_motor', 'regla_incumplida_id', 'estado',
-        'fecha_estimada_resolucion', 'revisor_id',
+        'student_id', 'type', 'course_id', 'required_course_id',
+        'origin_institution', 'external_course', 'validation_precedent_id',
+        'engine_result', 'violated_rule_id', 'status',
+        'estimated_resolution_date', 'reviewer_id',
     ];
 
     protected $casts = [
-        'fecha_estimada_resolucion' => 'date',
+        'estimated_resolution_date' => 'date',
     ];
 
     public function student(): BelongsTo
     {
-        return $this->belongsTo(StudentModel::class, 'estudiante_id');
+        return $this->belongsTo(StudentModel::class, 'student_id');
     }
 
     public function course(): BelongsTo
     {
-        return $this->belongsTo(CourseModel::class, 'curso_id');
+        return $this->belongsTo(CourseModel::class, 'course_id');
     }
 
     public function requiredCourse(): BelongsTo
     {
-        return $this->belongsTo(CourseModel::class, 'curso_requisito_id');
+        return $this->belongsTo(CourseModel::class, 'required_course_id');
     }
 
     public function validationPrecedent(): BelongsTo
     {
-        return $this->belongsTo(ValidationPrecedentModel::class, 'convalidacion_historica_id');
+        return $this->belongsTo(ValidationPrecedentModel::class, 'validation_precedent_id');
     }
 
     public function violatedRule(): BelongsTo
     {
-        return $this->belongsTo(WaiverRuleModel::class, 'regla_incumplida_id');
+        return $this->belongsTo(WaiverRuleModel::class, 'violated_rule_id');
     }
 
     public function reviewer(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'revisor_id');
+        return $this->belongsTo(User::class, 'reviewer_id');
     }
 
     public function statusHistory(): HasMany
     {
-        return $this->hasMany(RequestStatusHistoryModel::class, 'solicitud_id');
+        return $this->hasMany(RequestStatusHistoryModel::class, 'request_id');
     }
 }

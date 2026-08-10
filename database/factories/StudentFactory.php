@@ -17,11 +17,11 @@ class StudentFactory extends Factory
     {
         return [
             'user_id' => null,
-            'cedula' => fake()->unique()->numerify('#-####-####'),
-            'nombre' => fake()->firstName(),
-            'primer_apellido' => fake()->lastName(),
-            'segundo_apellido' => fake()->lastName(),
-            'activo' => true,
+            'national_id' => fake()->unique()->numerify('#-####-####'),
+            'name' => fake()->firstName(),
+            'last_name' => fake()->lastName(),
+            'second_last_name' => fake()->lastName(),
+            'active' => true,
         ];
     }
 

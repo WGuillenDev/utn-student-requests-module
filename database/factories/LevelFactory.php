@@ -16,8 +16,8 @@ class LevelFactory extends Factory
     public function definition(): array
     {
         return [
-            'plan_estudio_id' => StudyPlanModel::factory(),
-            'numero' => fake()->numberBetween(1, 10),
+            'study_plan_id' => StudyPlanModel::factory(),
+            'number' => fake()->numberBetween(1, 10),
         ];
     }
 }

@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\DB;
 class CareerSeeder extends Seeder
 {
     /**
-     * Careers in scope (official SQL, Section 9.1).
+     * Careers in scope (SRS v1.2, Section 9.1). Program names are kept in
+     * Spanish: they are the official UTN program names, not translatable labels.
      */
     public function run(): void
     {
@@ -30,9 +31,9 @@ class CareerSeeder extends Seeder
         ];
 
         foreach ($careers as $name) {
-            DB::table('carreras')->insertOrIgnore([
-                'nombre' => $name,
-                'activa' => true,
+            DB::table('careers')->insertOrIgnore([
+                'name' => $name,
+                'active' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

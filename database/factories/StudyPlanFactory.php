@@ -16,22 +16,22 @@ class StudyPlanFactory extends Factory
     public function definition(): array
     {
         return [
-            'carrera_id' => CareerModel::factory(),
-            'nombre' => 'Plan '.fake()->year(),
-            'anio_implementacion' => fake()->year(),
-            'clasificacion' => 'Vigente',
-            'fecha_cierre_matricula' => null,
+            'career_id' => CareerModel::factory(),
+            'name' => 'Plan '.fake()->year(),
+            'implementation_year' => fake()->year(),
+            'classification' => 'Active',
+            'enrollment_closing_date' => null,
         ];
     }
 
     /**
-     * A Terminal plan always requires an enrollment closing date (chk_planes_terminal_fecha).
+     * A Terminal plan always requires an enrollment closing date (chk_study_plans_terminal_date).
      */
     public function terminal(): static
     {
         return $this->state(fn (array $attributes) => [
-            'clasificacion' => 'Terminal',
-            'fecha_cierre_matricula' => fake()->dateTimeBetween('now', '+2 years')->format('Y-m-d'),
+            'classification' => 'Terminal',
+            'enrollment_closing_date' => fake()->dateTimeBetween('now', '+2 years')->format('Y-m-d'),
         ]);
     }
 }

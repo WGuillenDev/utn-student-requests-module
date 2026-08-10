@@ -20,14 +20,14 @@ class StudentModel extends Model
         return StudentFactory::new();
     }
 
-    protected $table = 'estudiantes';
+    protected $table = 'students';
 
     protected $fillable = [
-        'user_id', 'cedula', 'nombre', 'primer_apellido', 'segundo_apellido', 'activo',
+        'user_id', 'national_id', 'name', 'last_name', 'second_last_name', 'active',
     ];
 
     protected $casts = [
-        'activo' => 'boolean',
+        'active' => 'boolean',
     ];
 
     public function user(): BelongsTo
@@ -37,12 +37,12 @@ class StudentModel extends Model
 
     public function studyPlans(): BelongsToMany
     {
-        return $this->belongsToMany(StudyPlanModel::class, 'estudiante_plan', 'estudiante_id', 'plan_estudio_id')
-            ->withPivot('nivel_actual');
+        return $this->belongsToMany(StudyPlanModel::class, 'student_study_plan', 'student_id', 'study_plan_id')
+            ->withPivot('current_level');
     }
 
     public function academicRecords(): HasMany
     {
-        return $this->hasMany(AcademicRecordModel::class, 'estudiante_id');
+        return $this->hasMany(AcademicRecordModel::class, 'student_id');
     }
 }

@@ -16,12 +16,12 @@ class RequestStatusHistoryFactory extends Factory
     public function definition(): array
     {
         return [
-            'solicitud_id' => RequestModel::factory(),
-            'estado_anterior' => null,
-            'estado_nuevo' => 'Pendiente de revisión',
-            'comentario' => null,
+            'request_id' => RequestModel::factory(),
+            'previous_status' => null,
+            'new_status' => 'Pending Review',
+            'comment' => null,
             'user_id' => null,
-            'notificado_at' => null,
+            'notified_at' => null,
         ];
     }
 }

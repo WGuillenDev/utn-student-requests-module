@@ -17,24 +17,24 @@ class WaiverRuleModel extends Model
         return WaiverRuleFactory::new();
     }
 
-    protected $table = 'reglas_levantamiento';
+    protected $table = 'waiver_rules';
 
     protected $fillable = [
-        'curso_id', 'orden', 'tipo', 'curso_requisito_id', 'nota_minima', 'minimo_acumulado', 'activo',
+        'course_id', 'order', 'type', 'required_course_id', 'minimum_grade', 'minimum_accumulated', 'active',
     ];
 
     protected $casts = [
-        'nota_minima' => 'decimal:2',
-        'activo' => 'boolean',
+        'minimum_grade' => 'decimal:2',
+        'active' => 'boolean',
     ];
 
     public function course(): BelongsTo
     {
-        return $this->belongsTo(CourseModel::class, 'curso_id');
+        return $this->belongsTo(CourseModel::class, 'course_id');
     }
 
     public function requiredCourse(): BelongsTo
     {
-        return $this->belongsTo(CourseModel::class, 'curso_requisito_id');
+        return $this->belongsTo(CourseModel::class, 'required_course_id');
     }
 }

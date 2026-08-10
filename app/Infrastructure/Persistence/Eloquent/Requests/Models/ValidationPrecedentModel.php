@@ -17,14 +17,14 @@ class ValidationPrecedentModel extends Model
         return ValidationPrecedentFactory::new();
     }
 
-    protected $table = 'convalidaciones_historicas';
+    protected $table = 'validation_precedents';
 
     protected $fillable = [
-        'institucion', 'curso_externo', 'curso_id', 'resultado', 'numero_resolucion',
+        'institution', 'external_course', 'course_id', 'result', 'resolution_number',
     ];
 
     public function course(): BelongsTo
     {
-        return $this->belongsTo(CourseModel::class, 'curso_id');
+        return $this->belongsTo(CourseModel::class, 'course_id');
     }
 }

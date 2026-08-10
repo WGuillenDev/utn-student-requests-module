@@ -17,18 +17,18 @@ class LevelModel extends Model
         return LevelFactory::new();
     }
 
-    protected $table = 'niveles';
+    protected $table = 'levels';
 
-    protected $fillable = ['plan_estudio_id', 'numero'];
+    protected $fillable = ['study_plan_id', 'number'];
 
     public function studyPlan(): BelongsTo
     {
-        return $this->belongsTo(StudyPlanModel::class, 'plan_estudio_id');
+        return $this->belongsTo(StudyPlanModel::class, 'study_plan_id');
     }
 
     public function courses(): BelongsToMany
     {
-        return $this->belongsToMany(CourseModel::class, 'curso_nivel', 'nivel_id', 'curso_id')
-            ->withPivot('creditos');
+        return $this->belongsToMany(CourseModel::class, 'course_level', 'level_id', 'course_id')
+            ->withPivot('credits');
     }
 }

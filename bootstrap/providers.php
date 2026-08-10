@@ -1,8 +1,8 @@
 <?php
 
-use App\Infrastructure\Providers\DomainServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\FortifyServiceProvider;
+use App\Providers\DomainServiceProvider;
 
 return [
     AppServiceProvider::class,

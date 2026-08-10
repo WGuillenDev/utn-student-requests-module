@@ -15,12 +15,12 @@ class AcademicPeriodModel extends Model
         return AcademicPeriodFactory::new();
     }
 
-    protected $table = 'periodos_academicos';
+    protected $table = 'academic_periods';
 
-    protected $fillable = ['anio', 'cuatrimestre', 'fecha_inicio', 'fecha_fin'];
+    protected $fillable = ['year', 'term', 'start_date', 'end_date'];
 
     protected $casts = [
-        'fecha_inicio' => 'date',
-        'fecha_fin' => 'date',
+        'start_date' => 'date',
+        'end_date' => 'date',
     ];
 }

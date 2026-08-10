@@ -16,25 +16,25 @@ class CourseFactory extends Factory
     public function definition(): array
     {
         return [
-            'carrera_id' => CareerModel::factory(),
-            'codigo' => strtoupper(fake()->unique()->bothify('???-###')),
-            'nombre' => fake()->sentence(3),
-            'es_servicio' => false,
-            'es_cuello_botella' => false,
-            'requiere_laboratorio' => false,
-            'tipo_laboratorio' => null,
-            'activo' => true,
+            'career_id' => CareerModel::factory(),
+            'code' => strtoupper(fake()->unique()->bothify('???-###')),
+            'name' => fake()->sentence(3),
+            'is_service' => false,
+            'is_bottleneck' => false,
+            'requires_lab' => false,
+            'lab_type' => null,
+            'active' => true,
         ];
     }
 
     /**
-     * Cross-cutting service course: may have no career (chk_cursos_servicio_carrera).
+     * Cross-cutting service course: may have no career (chk_courses_service_career).
      */
     public function service(): static
     {
         return $this->state(fn (array $attributes) => [
-            'carrera_id' => null,
-            'es_servicio' => true,
+            'career_id' => null,
+            'is_service' => true,
         ]);
     }
 }

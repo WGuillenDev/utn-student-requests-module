@@ -17,20 +17,20 @@ class AcademicRecordFactory extends Factory
     public function definition(): array
     {
         return [
-            'estudiante_id' => StudentModel::factory(),
-            'curso_id' => CourseModel::factory(),
-            'periodo_academico_id' => null,
-            'estado' => 'Aprobado',
-            'nota' => fake()->randomFloat(2, 70, 100),
-            'equiparacion_id' => null,
+            'student_id' => StudentModel::factory(),
+            'course_id' => CourseModel::factory(),
+            'academic_period_id' => null,
+            'status' => 'Approved',
+            'grade' => fake()->randomFloat(2, 70, 100),
+            'equivalence_id' => null,
         ];
     }
 
     public function failed(): static
     {
         return $this->state(fn (array $attributes) => [
-            'estado' => 'Reprobado',
-            'nota' => fake()->randomFloat(2, 0, 69),
+            'status' => 'Failed',
+            'grade' => fake()->randomFloat(2, 0, 69),
         ]);
     }
 }

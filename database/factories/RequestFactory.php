@@ -17,18 +17,18 @@ class RequestFactory extends Factory
     public function definition(): array
     {
         return [
-            'estudiante_id' => StudentModel::factory(),
-            'tipo' => 'Levantamiento de requisito',
-            'curso_id' => CourseModel::factory(),
-            'curso_requisito_id' => CourseModel::factory(),
-            'institucion_origen' => null,
-            'curso_externo' => null,
-            'convalidacion_historica_id' => null,
-            'resultado_motor' => null,
-            'regla_incumplida_id' => null,
-            'estado' => 'Pendiente de revisión',
-            'fecha_estimada_resolucion' => null,
-            'revisor_id' => null,
+            'student_id' => StudentModel::factory(),
+            'type' => 'Requirement Waiver',
+            'course_id' => CourseModel::factory(),
+            'required_course_id' => CourseModel::factory(),
+            'origin_institution' => null,
+            'external_course' => null,
+            'validation_precedent_id' => null,
+            'engine_result' => null,
+            'violated_rule_id' => null,
+            'status' => 'Pending Review',
+            'estimated_resolution_date' => null,
+            'reviewer_id' => null,
         ];
     }
 
@@ -36,26 +36,26 @@ class RequestFactory extends Factory
     public function validation(): static
     {
         return $this->state(fn (array $attributes) => [
-            'tipo' => 'Convalidación',
-            'curso_requisito_id' => null,
-            'institucion_origen' => fake()->company(),
-            'curso_externo' => fake()->sentence(3),
+            'type' => 'Validation',
+            'required_course_id' => null,
+            'origin_institution' => fake()->company(),
+            'external_course' => fake()->sentence(3),
         ]);
     }
 
     public function automaticallyApproved(): static
     {
         return $this->state(fn (array $attributes) => [
-            'resultado_motor' => 'Procede automáticamente',
-            'estado' => 'Aprobada',
+            'engine_result' => 'Automatically Approved',
+            'status' => 'Approved',
         ]);
     }
 
     public function requiresManualReview(): static
     {
         return $this->state(fn (array $attributes) => [
-            'resultado_motor' => 'Requiere revisión manual',
-            'estado' => 'Pendiente de revisión',
+            'engine_result' => 'Requires Manual Review',
+            'status' => 'Pending Review',
         ]);
     }
 }

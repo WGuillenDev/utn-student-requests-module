@@ -8,15 +8,15 @@ use Illuminate\Support\Facades\DB;
 class AcademicPeriodSeeder extends Seeder
 {
     /**
-     * The academic period covered by the sample offering (official SQL, Section 9.3).
+     * The academic period covered by the sample offering (SRS v1.2, Section 9.3).
      */
     public function run(): void
     {
-        DB::table('periodos_academicos')->insertOrIgnore([
-            'anio' => 2025,
-            'cuatrimestre' => 3,
-            'fecha_inicio' => '2025-09-01',
-            'fecha_fin' => '2025-12-19',
+        DB::table('academic_periods')->insertOrIgnore([
+            'year' => 2025,
+            'term' => 3,
+            'start_date' => '2025-09-01',
+            'end_date' => '2025-12-19',
             'created_at' => now(),
             'updated_at' => now(),
         ]);

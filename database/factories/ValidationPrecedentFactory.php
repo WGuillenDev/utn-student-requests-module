@@ -16,18 +16,18 @@ class ValidationPrecedentFactory extends Factory
     public function definition(): array
     {
         return [
-            'institucion' => fake()->company(),
-            'curso_externo' => fake()->sentence(3),
-            'curso_id' => CourseModel::factory(),
-            'resultado' => 'Aprobada',
-            'numero_resolucion' => 'RES-'.fake()->unique()->numerify('####-##'),
+            'institution' => fake()->company(),
+            'external_course' => fake()->sentence(3),
+            'course_id' => CourseModel::factory(),
+            'result' => 'Approved',
+            'resolution_number' => 'RES-'.fake()->unique()->numerify('####-##'),
         ];
     }
 
     public function denied(): static
     {
         return $this->state(fn (array $attributes) => [
-            'resultado' => 'Denegada',
+            'result' => 'Denied',
         ]);
     }
 }

@@ -18,11 +18,11 @@ class FileModel extends Model
         return FileFactory::new();
     }
 
-    protected $table = 'archivos';
+    protected $table = 'files';
 
     protected $fillable = [
-        'uuid', 'user_id', 'archivable_type', 'archivable_id', 'tipo_documento',
-        'nombre_original', 'disco', 'ruta', 'mime_type', 'tamano_bytes', 'hash_sha256',
+        'uuid', 'user_id', 'fileable_type', 'fileable_id', 'document_type',
+        'original_name', 'disk', 'path', 'mime_type', 'size_bytes', 'hash_sha256',
     ];
 
     public function user(): BelongsTo
@@ -31,11 +31,11 @@ class FileModel extends Model
     }
 
     /**
-     * `archivable` matches the archivable_type/archivable_id column prefix
-     * from the official schema (Section 8.1) — do not rename without also
-     * changing the migration's morphs() column prefix.
+     * `fileable` matches the fileable_type/fileable_id column prefix
+     * from the migration's morphs() call — do not rename without also
+     * changing the migration's morph column prefix.
      */
-    public function archivable(): MorphTo
+    public function fileable(): MorphTo
     {
         return $this->morphTo();
     }

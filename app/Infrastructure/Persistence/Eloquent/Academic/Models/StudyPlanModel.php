@@ -17,23 +17,23 @@ class StudyPlanModel extends Model
         return StudyPlanFactory::new();
     }
 
-    protected $table = 'planes_estudio';
+    protected $table = 'study_plans';
 
     protected $fillable = [
-        'carrera_id', 'nombre', 'anio_implementacion', 'clasificacion', 'fecha_cierre_matricula',
+        'career_id', 'name', 'implementation_year', 'classification', 'enrollment_closing_date',
     ];
 
     protected $casts = [
-        'fecha_cierre_matricula' => 'date',
+        'enrollment_closing_date' => 'date',
     ];
 
     public function career(): BelongsTo
     {
-        return $this->belongsTo(CareerModel::class, 'carrera_id');
+        return $this->belongsTo(CareerModel::class, 'career_id');
     }
 
     public function levels(): HasMany
     {
-        return $this->hasMany(LevelModel::class, 'plan_estudio_id');
+        return $this->hasMany(LevelModel::class, 'study_plan_id');
     }
 }
