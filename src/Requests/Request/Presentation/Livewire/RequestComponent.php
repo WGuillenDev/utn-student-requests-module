@@ -43,11 +43,6 @@ class RequestComponent extends Component
 
     public string $reviewComment = '';
 
-    /** Filters exposed to the view as simple tabs/selects. */
-    public string $typeFilter = '';
-
-    public string $statusFilter = '';
-
     public RequestForm $form;
 
     public function mount(): void
@@ -55,16 +50,6 @@ class RequestComponent extends Component
         $this->authorize('viewAny', Request::class);
         $this->sortKey = 'created_at';
         $this->sortDir = 'desc';
-    }
-
-    public function updatingTypeFilter(): void
-    {
-        $this->page = 1;
-    }
-
-    public function updatingStatusFilter(): void
-    {
-        $this->page = 1;
     }
 
     public function openCreateModal(): void
@@ -171,8 +156,6 @@ class RequestComponent extends Component
             page: $this->page,
             sortBy: $this->sortKey,
             sortDir: $this->sortDir,
-            type: $this->typeFilter !== '' ? $this->typeFilter : null,
-            status: $this->statusFilter !== '' ? $this->statusFilter : null,
         );
 
         $paginator = new LengthAwarePaginator(

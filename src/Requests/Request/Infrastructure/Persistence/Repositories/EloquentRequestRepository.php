@@ -45,10 +45,8 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         int $page,
         ?string $sortBy = null,
         string $sortDir = 'asc',
-        ?string $type = null,
-        ?string $status = null,
     ): array {
-        $query = $this->baseQuery($search, $type, $status);
+        $query = $this->baseQuery($search);
 
         $column = in_array($sortBy, self::SORTABLE_COLUMNS, true) ? $sortBy : 'created_at';
         $direction = $sortDir === 'desc' ? 'desc' : 'asc';
@@ -88,23 +86,20 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         RequestModel::query()->whereKey($id)->delete();
     }
 
-    private function baseQuery(?string $search, ?string $type = null, ?string $status = null): \Illuminate\Database\Eloquent\Builder
+    private function baseQuery(?string $search): \Illuminate\Database\Eloquent\Builder
     {
         $query = RequestModel::query()->with('student');
 
-        if (filled($type)) {
-            $query->where('type', $type);
-        }
-
-        if (filled($status)) {
-            $query->where('status', $status);
-        }
-
         if (filled($search)) {
-            $query->whereHas('student', function ($studentQuery) use ($search): void {
-                $studentQuery->where('name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('national_id', 'like', "%{$search}%");
+            $query->where(function ($outer) use ($search): void {
+                $outer->whereHas('student', function ($studentQuery) use ($search): void {
+                    $studentQuery->where('name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('national_id', 'like', "%{$search}%");
+                })->orWhereHas('course', function ($courseQuery) use ($search): void {
+                    $courseQuery->where('name', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%");
+                });
             });
         }
 

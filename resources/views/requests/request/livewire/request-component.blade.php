@@ -12,21 +12,6 @@
         this.confirmDelete.open = false;
     },
 }">
-    <div class="form-field" style="display:flex; gap:.75rem; margin-bottom: 1rem;">
-        <select wire:model.live="typeFilter">
-            <option value="">{{ __('All types') }}</option>
-            <option value="Requirement Waiver">{{ __('Requirement Waiver') }}</option>
-            <option value="Validation">{{ __('Validation') }}</option>
-        </select>
-        <select wire:model.live="statusFilter">
-            <option value="">{{ __('All statuses') }}</option>
-            <option value="Pending Review">{{ __('Pending Review') }}</option>
-            <option value="In Review">{{ __('In Review') }}</option>
-            <option value="Approved">{{ __('Approved') }}</option>
-            <option value="Denied">{{ __('Denied') }}</option>
-        </select>
-    </div>
-
     <x-ui.data-table
         :headers="[
                 ['key' => 'student', 'label' => __('Student'), 'sortable' => false],
@@ -37,7 +22,7 @@
             ]"
         :mode="$tableMode"
         :rows="[]"
-        :searchable="['student']"
+        :searchable="['student', 'course']"
         :paginator="$requests ?? null"
         :sort-key="$sortKey"
         :sort-dir="$sortDir"

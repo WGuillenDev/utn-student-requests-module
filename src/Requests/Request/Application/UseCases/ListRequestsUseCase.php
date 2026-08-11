@@ -30,9 +30,7 @@ final class ListRequestsUseCase
         int $page = 1,
         ?string $sortBy = null,
         string $sortDir = 'asc',
-        ?string $type = null,
-        ?string $status = null,
     ): array {
-        return $this->repository->paginate($search, $perPage, $page, $sortBy, $sortDir, $type, $status);
+        return $this->repository->paginate($search, $perPage, $page, $sortBy, $sortDir);
     }
 }
