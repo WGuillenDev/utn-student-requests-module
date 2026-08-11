@@ -58,3 +58,56 @@ Esto se registra porque es el punto central del ejercicio: la IA no ejecutó la 
 - Falta correr la suite de migraciones y tests en un entorno real (Docker/CI del proyecto) antes de mergear esta rama: la revisión de la IA fue estática (sintaxis, nombres, dependencias declaradas), no una prueba de ejecución real.
 
 ---
+
+## Entrada — 11 de agosto de 2026
+**Tema:** Levantar el entorno local del proyecto (base de datos MySQL + `composer run dev`) y depurar los fallos de arranque encontrados en el proceso
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía CLI con acceso a la terminal y al código del proyecto
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Se pidió, en varios pasos sucesivos dentro de la misma sesión:
+- "Necesito levantar el proyecto, con composer."
+- Orientación paso a paso para crear la base de datos MySQL e importar un dump SQL propio (`sistema_gestion_academica_utn (1).sql`), incluyendo cómo entrar a la consola de `mysql` y si usar MySQL Workbench o la terminal.
+- Ayuda para corregir comandos de PowerShell que fallaban al intentar redirigir el dump con `<`.
+- Cuáles son las credenciales activas para iniciar sesión en la aplicación.
+- Verificar, antes de hacer commit, si el módulo de Solicitudes Estudiantiles seguía activo tras los cambios realizados.
+
+### 2. Qué encontró la IA antes de actuar (y por qué no asumió que era un problema de base de datos)
+
+1. **El primer error (`Invalid route action: [...PermissionComponent]`) no era de base de datos.** Ocurría al registrar rutas, antes de que la app tocara MySQL — se confirmó ejecutando `php artisan route:clear`, que falla igual sin conexión a datos. La IA no aceptó la hipótesis inicial del equipo ("debo levantar la base de datos primero") sin antes verificarla con `class_exists()` contra el autoload puro de Composer, que devolvió `false`: la clase no se estaba autoloadeando. La causa real era un `vendor/composer/autoload_*.php` desactualizado (probablemente por el módulo `Permission` agregado en un commit reciente sin correr `composer dump-autoload` después).
+2. **El dump SQL importado no traía la tabla `migrations`.** Se detuvo antes de asumir cualquier cosa y preguntó al equipo cómo proceder (marcar migraciones como aplicadas vs. reconstruir desde cero) en lugar de decidir unilateralmente.
+3. **Incompatibilidad de esquema no evidente a simple vista:** tras marcar las migraciones como aplicadas, `migrate:fresh` reveló que el dump importado correspondía al **esquema viejo en español** (`carreras`, `solicitudes`, `reglas_levantamiento`) de una etapa anterior del proyecto, mientras que el código actual (tras la traducción registrada en la entrada del 10 de agosto) usa **tablas en inglés** (`careers`, `requests`, `waiver_rules`). La IA comparó con `diff` los pares de migraciones sospechosas antes de proponer una solución, en vez de borrar archivos a ciegas.
+4. **Bug real en el repositorio:** confirmó, migración por migración, que el set `2026_08_03_*` (10 archivos, en español) era un residuo de la migración a inglés del 6-7 de agosto que nunca se eliminó — la causa de que `migrate:fresh` fallara con "table already exists".
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El diagnóstico del error de autoload y la corrección con `composer dump-autoload`.
+- Crear la base de datos e importar el dump vía consola de `mysql` (no Workbench, por decisión explícita del equipo tras comparar ambas opciones).
+- Marcar inicialmente las 30 migraciones como aplicadas sin tocar los datos importados (primera opción elegida por el equipo cuando se le preguntó).
+- Al descubrirse la incompatibilidad de esquema, la propuesta de **reconstruir con `migrate:fresh --seed`** usando las migraciones en inglés como fuente de verdad, aceptando la pérdida de los datos del dump importado (que ya no eran compatibles con el código actual).
+- La eliminación de los 10 archivos de migración obsoletos en español, tras ver el `diff` que demostraba que eran duplicados exactos (traducidos) de los del 6-7 de agosto.
+- Las credenciales de prueba tal como están definidas en `DatabaseSeeder.php` (`prueba@gmail.com` / `admin@gmail.com`, clave `12345678`), sin que la IA las inventara.
+
+### 4. Qué se rechazó y por qué
+
+- **Se rechazó (implícitamente, al pedir verificación) dar por buena la corrección solo por el mensaje de éxito de la terminal.** El equipo pidió explícitamente comprobar, tanto en el navegador como leyendo el código (`resources/views/requests/request/livewire/request-component.blade.php`), que el módulo de Solicitudes Estudiantiles seguía activo antes de confirmar el commit — no bastaba con que `migrate:fresh --seed` terminara sin errores.
+- **Se rechazó continuar usando el dump SQL original** una vez confirmado que su esquema (español) no correspondía al código actual (inglés): mantenerlo habría dejado la aplicación con tablas duplicadas o inservibles.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- La IA no pudo ejecutar los comandos interactivos de `mysql` que requerían escribir la contraseña (no hay TTY en el entorno de ejecución de comandos) — el equipo tuvo que teclear esos pasos manualmente en su propia terminal, guiado por la IA.
+- Se corrigió un error de sintaxis de PowerShell: `<` no redirige entrada hacia un ejecutable externo como en Bash/CMD; hubo que envolver el comando en `cmd /c '...'` para que la importación del dump funcionara.
+- Se verificó manualmente, consultando la base de datos con `SHOW TABLES`, que ninguna tabla en inglés (`careers`, `students`, `requests`, etc.) existiera antes de reconstruir — la IA no asumió el diagnóstico sin evidencia directa de la base de datos real.
+- Se verificó en el navegador (pantalla `/solicitudes` cargando la tabla, filtros y botón "Agregar") y en el código (existencia y tamaño real del archivo Blade) que el módulo de Solicitudes seguía funcional después de reconstruir el esquema.
+
+### 6. Qué se aprendió del proceso
+
+- Un error de arranque de Laravel no siempre es lo que "parece" (en este caso, todo apuntaba a la base de datos porque fue lo primero que se mencionó) — vale la pena que la IA aísle la causa raíz con evidencia (`class_exists`, `route:clear` sin DB) antes de seguir la hipótesis inicial del equipo.
+- Importar un dump SQL crudo a un proyecto Laravel no reconstruye la tabla `migrations`: el equipo debe decidir explícitamente si "finge" que las migraciones ya corrieron o si reconstruye desde el código — no es una decisión que la IA deba tomar sola porque implica un trade-off de datos reales vs. consistencia con el código.
+- Los residuos de una migración de idioma (español → inglés) documentada en la entrada anterior del diario no eran solo un detalle cosmético: se convirtieron en un bug funcional real (`migrate:fresh` roto) semanas después, cuando alguien intentó reconstruir la base de datos desde cero. Vale la pena, como equipo, limpiar archivos obsoletos en el mismo commit donde se hace una traducción/renombrado, no dejarlos "por si acaso".
+- Verificar un cambio en el código fuente (¿existe la vista?, ¿tiene contenido?) además de en el navegador da una confirmación más completa que solo probar visualmente — especialmente antes de un commit que borra archivos.
+
+---
