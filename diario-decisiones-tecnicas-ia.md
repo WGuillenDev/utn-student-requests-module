@@ -1,5 +1,11 @@
 # Diario de Decisiones Técnicas e IA — SIGA-UTN
 
+Documento donde el equipo registra, a lo largo de todo el desarrollo: qué se le consultó a la IA, qué se aceptó de su respuesta, qué se rechazó y por qué, qué hubo que corregir porque estaba incorrecto o incompleto, y qué se aprendió del proceso.
+
+Este diario es la evidencia de que el criterio técnico del equipo, y no la herramienta, dirigió las decisiones del proyecto. Un diario vacío o genérico ("la IA ayudó con el código") no cumple el requisito.
+
+---
+
 ## Entrada — 10 de agosto de 2026
 **Tema:** Integración del módulo de Solicitudes Estudiantiles (ES-01–ES-04) al proyecto SIGA-UTN
 **Participantes:** Equipo de desarrollo ISW-521

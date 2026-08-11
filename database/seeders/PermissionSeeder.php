@@ -29,7 +29,7 @@ class PermissionSeeder extends Seeder
      *
      * @var array<int, string>
      */
-    private const MODULES = ['roles', 'permissions'];
+    private const MODULES = ['roles', 'permissions', 'requests', 'waiver_rules', 'validation_precedents'];
 
     public function run(): void
     {
@@ -41,5 +41,13 @@ class PermissionSeeder extends Seeder
                 );
             }
         }
+
+        // Custom action outside the standard 7 — reviewing (changing the
+        // status of) a request. See Src\Requests\Request\Presentation\
+        // Policies\RequestPolicy::review().
+        Permission::query()->firstOrCreate(
+            ['name' => 'requests.review'],
+            ['module' => 'requests', 'action' => 'review'],
+        );
     }
 }
