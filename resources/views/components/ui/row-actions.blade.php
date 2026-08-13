@@ -1,6 +1,8 @@
 @props([
+'canView' => false,
 'canEdit' => false,
 'canDelete' => false,
+'viewAction' => null,
 'editAction' => null,
 'deleteId' => null,
 'deleteVisible' => 'true',
@@ -14,9 +16,10 @@
     component blade views. `$wire` resolves the nearest Livewire component
     root regardless of local x-data, so no extra wrapping is required here.
 
-    No "view" action for now (Role/Permission have no read-only detail
-    screen yet) — only Edit/Delete, matching the approved design's icon
-    set minus the view eye-icon.
+    "view" (blue eye icon) is opt-in via `canView`/`viewAction` — Role/
+    Permission don't pass them, so they keep the Edit/Delete-only layout;
+    modules with a read-only detail screen (e.g. ValidationPrecedent) wire
+    both.
 
     Delete no longer uses the native confirm() dialog — it opens the
     reusable <x-ui.confirm-delete-modal> via askDelete(id), a method
@@ -26,6 +29,15 @@
     '{{ $entity->id() }}' in server mode) — askDelete() owns the actual
     confirm → delete → success flow from there.
 --}}
+@if ($canView && $viewAction)
+<button type="button" class="action-icon view" @click="{{ $viewAction }}" title="{{ __('View') }}" aria-label="{{ __('View') }}">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+    </svg>
+</button>
+@endif
+
 @if ($canEdit && $editAction)
 <button type="button" class="action-icon edit" @click="{{ $editAction }}" title="{{ __('Edit') }}" aria-label="{{ __('Edit') }}">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

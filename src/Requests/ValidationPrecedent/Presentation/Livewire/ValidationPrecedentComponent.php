@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Requests\ValidationPrecedent\Presentation\Livewire;
 
+use App\Infrastructure\Persistence\Eloquent\Academic\Models\CareerModel;
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
 use App\Livewire\Concerns\InteractsWithDataTable;
 use App\Livewire\Concerns\InteractsWithExports;
@@ -41,10 +42,29 @@ class ValidationPrecedentComponent extends Component
 
     public bool $showModal = false;
 
+    public bool $showViewModal = false;
+
     /**
      * Null while creating; the row's id while editing.
      */
     public ?int $editingId = null;
+
+    /**
+     * The row being shown in the read-only detail modal, as a plain
+     * array: ValidationPrecedent is a domain entity with no public
+     * properties, so it isn't Livewire-synthesizable and can't survive
+     * the dehydrate/hydrate cycle between requests as-is.
+     *
+     * @var array{id: int, institution: string, externalCourse: string, courseId: int, result: string, resolutionNumber: string}|null
+     */
+    public ?array $viewing = null;
+
+    /**
+     * Client-side filter only — narrows the "Equivalent internal course"
+     * select in the form. Not part of ValidationPrecedentDTO: the entity
+     * only stores course_id, never the career.
+     */
+    public ?int $filterCareerId = null;
 
     public ValidationPrecedentForm $form;
 
@@ -60,6 +80,7 @@ class ValidationPrecedentComponent extends Component
         $this->authorize('create', ValidationPrecedent::class);
 
         $this->editingId = null;
+        $this->filterCareerId = null;
         $this->form->reset();
         $this->form->result = 'Approved';
         $this->resetValidation();
@@ -72,14 +93,59 @@ class ValidationPrecedentComponent extends Component
         $this->authorize('update', $precedent);
 
         $this->editingId = $id;
+        $this->filterCareerId = CourseModel::query()->whereKey($precedent->courseId())->value('career_id');
         $this->form->fromEntity($precedent);
         $this->resetValidation();
+        $this->showViewModal = false;
         $this->showModal = true;
     }
 
     public function closeModal(): void
     {
         $this->showModal = false;
+    }
+
+    /**
+     * Switching the "Carrera" filter narrows courseOptions() — clear the
+     * currently selected course if it no longer belongs to that career,
+     * so the form can't submit a mismatched pair silently.
+     */
+    public function updatedFilterCareerId(): void
+    {
+        if ($this->filterCareerId === null || $this->form->courseId === null) {
+            return;
+        }
+
+        $stillValid = CourseModel::query()
+            ->whereKey($this->form->courseId)
+            ->where('career_id', $this->filterCareerId)
+            ->exists();
+
+        if (! $stillValid) {
+            $this->form->courseId = null;
+        }
+    }
+
+    public function openViewModal(int $id, FindValidationPrecedentUseCase $useCase): void
+    {
+        $precedent = $useCase->handle($id);
+        $this->authorize('view', $precedent);
+
+        $this->viewing = [
+            'id' => $precedent->id(),
+            'institution' => $precedent->institution(),
+            'externalCourse' => $precedent->externalCourse(),
+            'courseId' => $precedent->courseId(),
+            'result' => $precedent->result(),
+            'resolutionNumber' => $precedent->resolutionNumber(),
+        ];
+        $this->showViewModal = true;
+    }
+
+    public function closeViewModal(): void
+    {
+        $this->showViewModal = false;
+        $this->viewing = null;
     }
 
     public function save(
@@ -176,7 +242,9 @@ class ValidationPrecedentComponent extends Component
         return view('requests.validation-precedent.livewire.validation-precedent-component', [
             'tableMode' => 'server',
             'validationPrecedents' => $paginator,
-            'courseOptions' => $this->courseOptions(),
+            'careerOptions' => $this->careerOptions(),
+            'courseOptions' => $this->courseOptions($this->filterCareerId),
+            'courseLabels' => $this->courseLabels(),
         ])->layout('components.layouts.dashboard', [
             'title' => __('Validation Precedents'),
             'subtitle' => __('Historical record of external validations used by the rules engine'),
@@ -233,18 +301,49 @@ class ValidationPrecedentComponent extends Component
     /**
      * Cross-context read (Academic), same reasoning already accepted for
      * RequestComponent::courseOptions() / WaiverRuleComponent::courseOptions().
+     * Narrowed by `$careerId` so the "Carrera" filter above the select
+     * actually restricts what's offered — null shows every course.
      *
      * @return array<int, array{id: int, label: string}>
      */
-    private function courseOptions(): array
+    private function courseOptions(?int $careerId = null): array
     {
         return CourseModel::query()
+            ->when($careerId !== null, fn ($query) => $query->where('career_id', $careerId))
             ->orderBy('name')
             ->get(['id', 'name', 'code'])
             ->map(fn (CourseModel $c) => [
                 'id' => $c->id,
                 'label' => "{$c->code} — {$c->name}",
             ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{id: int, label: string}>
+     */
+    private function careerOptions(): array
+    {
+        return CareerModel::query()
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (CareerModel $c) => ['id' => $c->id, 'label' => $c->name])
+            ->all();
+    }
+
+    /**
+     * courseId => "CODE — Name" lookup for the table column and the view
+     * modal — same data as courseOptions() but keyed for O(1) lookup and
+     * unfiltered by career, since a precedent's course may sit outside
+     * whatever career is currently selected in the form filter.
+     *
+     * @return array<int, string>
+     */
+    private function courseLabels(): array
+    {
+        return CourseModel::query()
+            ->get(['id', 'name', 'code'])
+            ->mapWithKeys(fn (CourseModel $c) => [$c->id => "{$c->code} — {$c->name}"])
             ->all();
     }
 }

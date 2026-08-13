@@ -42,8 +42,9 @@
             <span>
                 @php $status = $request->status(); @endphp
                 <span class="status-badge {{ match(true) {
-                        $status === 'Approved' => 'system',
-                        $status === 'Denied' => 'custom',
+                        $status === 'Approved' => 'positive',
+                        $status === 'Denied' => 'negative',
+                        $status === 'Pending Review', $status === 'In Review' => 'pending',
                         default => '',
                     } }}">{{ __($status) }}</span>
             </span>

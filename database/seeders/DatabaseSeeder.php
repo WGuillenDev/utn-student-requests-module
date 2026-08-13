@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             CareerSeeder::class,
             AcademicPeriodSeeder::class,
+            TestDataSeeder::class,
         ]);
 
         $superadminUser = User::factory()->create([

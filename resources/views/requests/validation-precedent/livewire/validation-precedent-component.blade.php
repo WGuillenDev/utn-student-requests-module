@@ -38,19 +38,21 @@
         <div class="data-row" role="row">
             <span>{{ $precedent->institution() }}</span>
             <span>{{ $precedent->externalCourse() }}</span>
-            <span>{{ $precedent->courseId() }}</span>
+            <span>{{ $courseLabels[$precedent->courseId()] ?? $precedent->courseId() }}</span>
             <span>
                 @if ($precedent->result() === 'Approved')
-                <span class="status-badge system">{{ __('Approved') }}</span>
+                <span class="status-badge positive">{{ __('Approved') }}</span>
                 @else
-                <span class="status-badge custom">{{ __('Denied') }}</span>
+                <span class="status-badge negative">{{ __('Denied') }}</span>
                 @endif
             </span>
             <span>{{ $precedent->resolutionNumber() }}</span>
             <div class="actions-cell">
                 <x-ui.row-actions
+                    :can-view="Auth::user()->can('view', $precedent)"
                     :can-edit="Auth::user()->can('update', $precedent)"
                     :can-delete="Auth::user()->can('delete', $precedent)"
+                    view-action="$wire.openViewModal({{ $precedent->id() }})"
                     edit-action="$wire.openEditModal({{ $precedent->id() }})"
                     delete-id="{{ $precedent->id() }}" />
             </div>
@@ -71,6 +73,16 @@
             <label for="precedentExternalCourse">{{ __('External course') }}</label>
             <input type="text" id="precedentExternalCourse" wire:model="form.externalCourse" class="{{ $errors->has('form.externalCourse') ? 'has-error' : '' }}">
             @error('form.externalCourse') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+
+        <div class="form-field">
+            <label for="precedentCareer">{{ __('Career') }}</label>
+            <select id="precedentCareer" wire:model.live="filterCareerId">
+                <option value="">{{ __('All careers') }}</option>
+                @foreach ($careerOptions as $option)
+                <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                @endforeach
+            </select>
         </div>
 
         <div class="form-field">
@@ -101,6 +113,48 @@
         <x-slot:footer>
             <button type="button" class="btn btn-secondary" wire:click="closeModal">{{ __('Cancel') }}</button>
             <button type="button" class="btn btn-primary" wire:click="save">{{ __('Confirm') }}</button>
+        </x-slot:footer>
+    </x-ui.modal>
+
+    <x-ui.modal :show="$showViewModal" :title="__('Precedent detail')" close-action="closeViewModal">
+        @if ($viewing)
+        <div class="form-field">
+            <label>{{ __('Institution') }}</label>
+            <p>{{ $viewing['institution'] }}</p>
+        </div>
+
+        <div class="form-field">
+            <label>{{ __('External course') }}</label>
+            <p>{{ $viewing['externalCourse'] }}</p>
+        </div>
+
+        <div class="form-field">
+            <label>{{ __('Equivalent internal course') }}</label>
+            <p>{{ $courseLabels[$viewing['courseId']] ?? $viewing['courseId'] }}</p>
+        </div>
+
+        <div class="form-field">
+            <label>{{ __('Result') }}</label>
+            <p>
+                @if ($viewing['result'] === 'Approved')
+                <span class="status-badge positive">{{ __('Approved') }}</span>
+                @else
+                <span class="status-badge negative">{{ __('Denied') }}</span>
+                @endif
+            </p>
+        </div>
+
+        <div class="form-field">
+            <label>{{ __('Resolution number') }}</label>
+            <p>{{ $viewing['resolutionNumber'] }}</p>
+        </div>
+        @endif
+
+        <x-slot:footer>
+            <button type="button" class="btn btn-secondary" wire:click="closeViewModal">{{ __('Close') }}</button>
+            @if ($viewing && Auth::user()->hasPermissionTo('validation_precedents.edit'))
+            <button type="button" class="btn btn-primary" wire:click="openEditModal({{ $viewing['id'] }})">{{ __('Edit') }}</button>
+            @endif
         </x-slot:footer>
     </x-ui.modal>
 

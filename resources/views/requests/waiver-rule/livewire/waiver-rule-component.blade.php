@@ -48,8 +48,8 @@
                     'Always manual review': '{{ __('Always manual review') }}',
                 }[row.type]"></span>
                 <span>
-                    <span class="status-badge system" x-show="row.active">{{ __('Active') }}</span>
-                    <span class="status-badge custom" x-show="!row.active">{{ __('Inactive') }}</span>
+                    <span class="status-badge positive" x-show="row.active">{{ __('Active') }}</span>
+                    <span class="status-badge neutral" x-show="!row.active">{{ __('Inactive') }}</span>
                 </span>
                 <div class="actions-cell">
                     <x-ui.row-actions
@@ -71,9 +71,9 @@
             <span>{{ __($waiverRule->type()) }}</span>
             <span>
                 @if ($waiverRule->active())
-                <span class="status-badge system">{{ __('Active') }}</span>
+                <span class="status-badge positive">{{ __('Active') }}</span>
                 @else
-                <span class="status-badge custom">{{ __('Inactive') }}</span>
+                <span class="status-badge neutral">{{ __('Inactive') }}</span>
                 @endif
             </span>
             <div class="actions-cell">

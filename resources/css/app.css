@@ -110,8 +110,10 @@ select:focus[data-flux-control] {
     --badgeCustomBg: #e6f0e2;
     --badgeCustomText: #4a8f3c;
 
-    /* Row action icons — matches the approved design's edit (amber) /
-       delete (red) circular icon buttons exactly. */
+    /* Row action icons — matches the approved design's view (blue) /
+       edit (amber) / delete (red) circular icon buttons exactly. */
+    --actionViewBg: #e2ecfd;
+    --actionViewText: #1d4ed8;
     --actionEditBg: #fff3d6;
     --actionEditText: #93650b;
     --actionDeleteBg: #fde7e7;
@@ -141,6 +143,8 @@ select:focus[data-flux-control] {
     --badgeCustomBg: #16321f;
     --badgeCustomText: #7fd28f;
 
+    --actionViewBg: #16274d;
+    --actionViewText: #8fb4fb;
     --actionEditBg: #3a2c0e;
     --actionEditText: #f2c063;
     --actionDeleteBg: #3a1620;
@@ -786,6 +790,25 @@ select:focus[data-flux-control] {
     background: var(--badgeCustomBg);
     color: var(--badgeCustomText);
   }
+  /* Semantic status colors (approved design): green = active/approved,
+     amber = pending/in review, red = denied, blue-gray = inactive.
+     Aliases over the existing tokens above — no new colors introduced. */
+  .status-badge.positive {
+    background: var(--badgeCustomBg);
+    color: var(--badgeCustomText);
+  }
+  .status-badge.pending {
+    background: var(--actionEditBg);
+    color: var(--actionEditText);
+  }
+  .status-badge.negative {
+    background: var(--actionDeleteBg);
+    color: var(--actionDeleteText);
+  }
+  .status-badge.neutral {
+    background: var(--badgeSystemBg);
+    color: var(--badgeSystemText);
+  }
   .actions-cell {
     display: flex;
     align-items: center;
@@ -801,6 +824,10 @@ select:focus[data-flux-control] {
     cursor: pointer;
     border: none;
     flex-shrink: 0;
+  }
+  .action-icon.view {
+    background: var(--actionViewBg);
+    color: var(--actionViewText);
   }
   .action-icon.edit {
     background: var(--actionEditBg);
