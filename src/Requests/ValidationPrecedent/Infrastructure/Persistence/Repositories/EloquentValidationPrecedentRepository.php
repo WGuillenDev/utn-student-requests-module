@@ -55,6 +55,17 @@ final class EloquentValidationPrecedentRepository implements ValidationPrecedent
         ];
     }
 
+    public function findByInstitutionAndExternalCourse(string $institution, string $externalCourse): ?ValidationPrecedent
+    {
+        $model = ValidationPrecedentModel::query()
+            ->where('institution', $institution)
+            ->where('external_course', $externalCourse)
+            ->latest('id')
+            ->first();
+
+        return $model ? $this->toDomain($model) : null;
+    }
+
     public function save(ValidationPrecedent $validationPrecedent): ValidationPrecedent
     {
         $model = $validationPrecedent->id()

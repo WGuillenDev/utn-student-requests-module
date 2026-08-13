@@ -33,4 +33,17 @@ final class ListRequestsUseCase
     ): array {
         return $this->repository->paginate($search, $perPage, $page, $sortBy, $sortDir);
     }
+
+    /**
+     * @return array{items: array<int, Request>, total: int}
+     */
+    public function paginateForStudent(
+        int $studentId,
+        int $perPage = 10,
+        int $page = 1,
+        ?string $sortBy = null,
+        string $sortDir = 'asc',
+    ): array {
+        return $this->repository->paginateForStudent($studentId, $perPage, $page, $sortBy, $sortDir);
+    }
 }

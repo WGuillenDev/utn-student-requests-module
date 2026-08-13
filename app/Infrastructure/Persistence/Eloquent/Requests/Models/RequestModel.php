@@ -3,6 +3,7 @@
 namespace App\Infrastructure\Persistence\Eloquent\Requests\Models;
 
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
+use App\Infrastructure\Persistence\Eloquent\Documents\Models\FileModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
 use App\Models\User;
 use Database\Factories\RequestFactory;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class RequestModel extends Model
 {
@@ -66,5 +68,10 @@ class RequestModel extends Model
     public function statusHistory(): HasMany
     {
         return $this->hasMany(RequestStatusHistoryModel::class, 'request_id');
+    }
+
+    public function files(): MorphMany
+    {
+        return $this->morphMany(FileModel::class, 'fileable');
     }
 }

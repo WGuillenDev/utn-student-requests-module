@@ -31,6 +31,21 @@ interface RequestRepositoryInterface
         string $sortDir = 'asc',
     ): array;
 
+    /**
+     * Student self-service listing ("My requests") — scoped strictly to
+     * one student, no free-text search (the owning student never has
+     * more than a handful of requests to browse).
+     *
+     * @return array{items: array<int, Request>, total: int}
+     */
+    public function paginateForStudent(
+        int $studentId,
+        int $perPage,
+        int $page,
+        ?string $sortBy = null,
+        string $sortDir = 'asc',
+    ): array;
+
     public function save(Request $request): Request;
 
     public function delete(int $id): void;

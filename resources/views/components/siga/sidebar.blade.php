@@ -24,8 +24,45 @@
                     <polyline points="9 6 15 12 9 18"></polyline>
                 </svg>
             </a>
+
+            {{--
+                Gated purely on the "Estudiante" role, not a permission —
+                this screen (StudentRequestComponent) is intentionally the
+                only one that role can reach in the Requests bounded
+                context; RequestPolicy::viewAny() denies it the staff
+                inbox link below even though it also holds the blanket
+                'requests.view' permission (see that policy's docblock).
+            --}}
+            @if(auth()->user()?->hasRole('Estudiante'))
+            <a href="{{ route('requests.student-request.index') }}" wire:navigate wire:current="active" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="9" y1="13" x2="15" y2="13"></line>
+                    <line x1="9" y1="17" x2="13" y2="17"></line>
+                </svg>
+                <span class="nav-text" data-labels>{{ __('My requests') }}</span>
+                <svg class="nav-chevron" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;">
+                    <polyline points="9 6 15 12 9 18"></polyline>
+                </svg>
+            </a>
+            @endif
         </div>
 
+        @php
+            $canSeeRoles = auth()->user()?->can('viewAny', \Src\IdentityAccess\Role\Domain\Entities\Role::class);
+            $canSeePermissions = auth()->user()?->can('viewAny', \Src\IdentityAccess\Permission\Domain\Entities\Permission::class);
+            $canSeeStudentRequests = auth()->user()?->can('viewAny', \Src\Requests\Request\Domain\Entities\Request::class)
+                || auth()->user()?->can('viewAny', \Src\Requests\WaiverRule\Domain\Entities\WaiverRule::class)
+                || auth()->user()?->can('viewAny', \Src\Requests\ValidationPrecedent\Domain\Entities\ValidationPrecedent::class);
+        @endphp
+        {{--
+            The Estudiante role has none of the 3 permissions above (it
+            only reaches its own screen via the role-gated link in the
+            MAIN group), so without this wrapper it would see an empty
+            "SYSTEM ADMINISTRATION" header with nothing underneath.
+        --}}
+        @if($canSeeRoles || $canSeePermissions || $canSeeStudentRequests)
         <div class="nav-group">
             <span class="nav-label" data-labels>{{ __('SYSTEM ADMINISTRATION') }}</span>
 
@@ -56,11 +93,6 @@
             </a>
             @endcan
 
-            @php
-                $canSeeStudentRequests = auth()->user()?->can('viewAny', \Src\Requests\Request\Domain\Entities\Request::class)
-                    || auth()->user()?->can('viewAny', \Src\Requests\WaiverRule\Domain\Entities\WaiverRule::class)
-                    || auth()->user()?->can('viewAny', \Src\Requests\ValidationPrecedent\Domain\Entities\ValidationPrecedent::class);
-            @endphp
             @if($canSeeStudentRequests)
             <div x-data="{ open: true }" x-on:livewire:navigated.window="open = false">
                 <div class="nav-item nav-parent" @click="open = !open">
@@ -106,6 +138,7 @@
             </div>
             @endif
         </div>
+        @endif
 
         <div class="nav-group">
             <span class="nav-label" data-labels>{{ __('ACADEMIC') }}</span>

@@ -49,6 +49,7 @@ final class Request
         ?int $requiredCourseId = null,
         ?string $originInstitution = null,
         ?string $externalCourse = null,
+        ?int $validationPrecedentId = null,
     ): self {
         return new self(
             id: null,
@@ -58,7 +59,7 @@ final class Request
             requiredCourseId: $requiredCourseId,
             originInstitution: $originInstitution,
             externalCourse: $externalCourse,
-            validationPrecedentId: null,
+            validationPrecedentId: $validationPrecedentId,
             engineResult: null,
             violatedRuleId: null,
             status: 'Pending Review',

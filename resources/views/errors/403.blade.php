@@ -91,8 +91,19 @@
                 <line x1="14.5" y1="9.5" x2="9.5" y2="14.5" />
             </svg>
         </div>
+        @php
+            // Laravel's Gate throws AuthorizationException with this exact
+            // hardcoded English string (see vendor/laravel/framework/src/
+            // Illuminate/Auth/Access/AuthorizationException.php) whenever a
+            // policy method denies access by returning a plain `false`
+            // instead of a Response with its own message — which is how
+            // every policy in this app denies. Treat it the same as an
+            // empty message so the Spanish fallback below is shown instead.
+            $rawMessage = $exception->getMessage();
+            $message = in_array($rawMessage, ['', 'This action is unauthorized.'], true) ? null : $rawMessage;
+        @endphp
         <h1>{{ __('You do not have permission to view this page') }}</h1>
-        <p>{{ $exception->getMessage() ?: __('Your account does not have the required permission for this action. If you believe this is a mistake, contact your system administrator.') }}</p>
+        <p>{{ $message ?? __('Your account does not have the required permission for this action. If you believe this is a mistake, contact your system administrator.') }}</p>
         @auth
         <a href="{{ route('dashboard') }}" class="btn">{{ __('Back to dashboard') }}</a>
         @else

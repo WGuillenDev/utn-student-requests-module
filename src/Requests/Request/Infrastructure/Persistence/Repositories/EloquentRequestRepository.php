@@ -59,6 +59,29 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         ];
     }
 
+    /**
+     * @return array{items: array<int, Request>, total: int}
+     */
+    public function paginateForStudent(
+        int $studentId,
+        int $perPage,
+        int $page,
+        ?string $sortBy = null,
+        string $sortDir = 'asc',
+    ): array {
+        $query = RequestModel::query()->with('student')->where('student_id', $studentId);
+
+        $column = in_array($sortBy, self::SORTABLE_COLUMNS, true) ? $sortBy : 'created_at';
+        $direction = $sortDir === 'desc' ? 'desc' : 'asc';
+
+        $paginator = $query->orderBy($column, $direction)->paginate(perPage: $perPage, page: $page);
+
+        return [
+            'items' => array_map($this->toDomain(...), $paginator->items()),
+            'total' => $paginator->total(),
+        ];
+    }
+
     public function save(Request $request): Request
     {
         $model = $request->id()
