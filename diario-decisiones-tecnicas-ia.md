@@ -111,3 +111,61 @@ Se pidió, en varios pasos sucesivos dentro de la misma sesión:
 - Verificar un cambio en el código fuente (¿existe la vista?, ¿tiene contenido?) además de en el navegador da una confirmación más completa que solo probar visualmente — especialmente antes de un commit que borra archivos.
 
 ---
+
+## Entrada — 13 de agosto de 2026
+**Tema:** Definición y creación de 3 perfiles de prueba (Superadmin, Estudiante, Coordinadora de Docencia) para validar el módulo de Solicitudes Estudiantiles
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía chat para el análisis/diseño y vía Claude Code en terminal para la implementación
+
+---
+
+### 1. Qué se le consultó a la IA
+
+En una primera sesión (chat), se le pidió analizar el repositorio base del docente (`SIGA-UTN`) y compararlo contra el proyecto propio para saber si ya traía usuarios/roles de prueba reutilizables, y luego proponer qué perfiles de prueba crear para poder ver la aplicación "como estudiante" y "como docente/revisor", basándose en:
+- El documento oficial del proyecto (`Proyecto_4_Solicitudes_Estudiantiles (3).docx`).
+- El script SQL oficial del sistema completo (`sistema_gestion_academica_utn (1).sql`), en particular su tabla `roles`.
+
+Después de acordar los 3 perfiles y sus permisos, se le pidió a la IA un prompt autocontenido para ejecutar la implementación en una segunda sesión (Claude Code en terminal), y finalmente que revisara el resultado antes del commit.
+
+### 2. Qué encontró la IA antes de actuar (y por qué no aceptó la primera idea del equipo tal cual)
+
+1. **El repo del docente no aporta roles académicos.** Se verificó archivo por archivo (`RoleSeeder.php`, `PermissionSeeder.php`, migraciones) que el proyecto del docente solo siembra `Superadmin`/`Admin` — sin `Estudiante` ni ningún rol de negocio. La idea inicial de "asimilar perfiles ya existentes en la BD del docente" no tenía nada que asimilar; había que crearlos desde cero.
+2. **La propuesta original del equipo era "Estudiante, Docente, Superadmin".** La IA señaló que la palabra "Docente" no aparece ni una sola vez en el documento oficial del proyecto como actor del sistema, y que en el catálogo oficial de roles (`sistema_gestion_academica_utn (1).sql`) el rol `Docente` existe pero representa a un profesor que consulta su oferta de cursos (`oferta.consultar`, `archivos.descargar`) — no tiene ningún permiso relacionado con solicitudes. Usar ese rol para "ver la bandeja de revisión" habría dado un usuario de prueba que ni siquiera puede entrar al módulo. El rol correcto, según el propio SRS (ES-01 y ES-04) y la columna `solicitudes.revisor_id` del esquema oficial (comentario literal: *"Usuario revisor (Docencia/Comisión)"*), es `Coordinadora de Docencia`.
+3. **`Superadmin` no sirve para validar criterios de aceptación.** La IA explicó que `Superadmin` tiene un `Gate::before` que bypasea toda autorización — usarlo como perfil de prueba principal ocultaría cualquier bug real de permisos/scoping, en vez de confirmar que el módulo funciona para un usuario con permisos reales y limitados.
+4. **Gap real detectado en el código, no solo de nomenclatura:** `RequestPolicy::view()`/`viewAny()` no filtran por dueño de la solicitud. La IA lo marcó explícitamente antes de crear el rol `Estudiante`: con los permisos propuestos, un estudiante vería las solicitudes de *todos* los estudiantes, lo cual contradice el criterio de aceptación literal de ES-03 ("el estudiante debe poder consultar el estado de **sus** solicitudes"). Se decidió, como equipo, crear los perfiles primero y dejar ese fix como tarea aparte explícita, en vez de que la IA lo resolviera sin que se le pidiera.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El mapeo final de roles: `Estudiante` → rol `Estudiante` (permisos `requests.create`, `requests.view`); `Docencia` → rol `Coordinadora de Docencia` (permisos `requests.view/search/review/export_pdf/export_excel` + `waiver_rules.create/view/edit/delete`); `Superadmin` se mantiene como está.
+- Las credenciales de ejemplo propuestas (`estudiante@gmail.com` / `docencia@gmail.com`, clave `12345678`), siguiendo el mismo patrón que los usuarios ya existentes en `DatabaseSeeder.php`.
+- Vincular el usuario `Estudiante` a un registro real de `StudentModel` (vía `user_id`), para que exista un expediente contra el cual el módulo pueda operar.
+- El prompt autocontenido generado para ejecutar el cambio en una sesión de Claude Code aparte, delegando la escritura del código (decisión explícita del equipo, no una desviación no autorizada).
+- El diagnóstico de que no hacía falta ninguna migración nueva: las columnas necesarias (`roles.name`, `students.user_id`, `requests.user_id`) ya existían en el esquema.
+
+### 4. Qué se rechazó y por qué
+
+- **Se rechazó el nombre "Docente" para el rol revisor**, por las razones del punto 2: no es un actor del SRS y, en el propio catálogo oficial, ese nombre está reservado para un perfil sin relación con solicitudes.
+- **Se rechazó usar `Superadmin` como perfil principal de prueba funcional**, por el mismo motivo del punto 3 del apartado anterior.
+- **Se rechazó (por ahora) que la IA implementara el fix de scoping por dueño en `RequestPolicy`** junto con la creación de los perfiles, para no mezclar dos cambios de alcance distinto en el mismo commit — queda como tarea explícita pendiente, documentada aquí.
+- **Se rechazó el código entregado por la sesión de Claude Code en su primera versión**, ver punto 5.
+
+### 5. Qué hubo que corregir o verificar manualmente — el error real de la IA
+
+Al revisar el `diff` generado por la sesión de Claude Code que implementó los seeders, se encontró que **la IA no respetó la convención de nombres ya establecida en el proyecto** (identificadores de código en inglés, valores de datos en español): las variables nuevas quedaron en español (`$estudiante`, `$docencia`, `$estudianteRole`, `$estudianteUser`, `$docenciaRole`, `$docenciaUser`) en `RoleSeeder.php` y `DatabaseSeeder.php`, a pesar de que el propio código que la IA tenía como contexto (y que ella misma tradujo en la entrada del 10 de agosto) usa inglés de forma consistente en todo lo demás.
+
+Esto es un ejemplo concreto de error de la IA: tuvo el contexto correcto disponible (el resto del archivo, escrito en inglés) y aun así generó variables nuevas en español, probablemente porque copió el idioma de los *valores* de rol (`'Estudiante'`, `'Coordinadora de Docencia'`) hacia los *nombres de variable*, sin distinguir que esa regla del proyecto aplica solo al contenido de datos, no a los identificadores. Se corrigió con un segundo prompt específico, dando la lista exacta de renombres (`$estudiante` → `$studentRole`, `$docencia` → `$teachingCoordinatorRole`, etc.) sin tocar ningún string literal ni la lógica.
+
+Después de la corrección, se verificó:
+- Con `git diff --stat` que solo se modificaron los 2 archivos esperados.
+- Contra la base de datos real (vía `php artisan tinker`) que los 4 roles (`Superadmin`, `Admin`, `Estudiante`, `Coordinadora de Docencia`) y sus permisos quedaron sincronizados exactamente como se pidió, que los 4 usuarios existen con el rol correcto, y que el `StudentModel` del usuario Estudiante quedó vinculado (`user_id` correcto).
+- Con `php artisan test` que la suite sigue en el mismo estado que antes del cambio (32/33, con la única falla preexistente y no relacionada de `AuthenticationTest::test_login_screen_can_be_rendered`).
+
+### 6. Qué se aprendió del proceso
+
+- Un nombre de rol "parece correcto" a simple vista si suena razonable (`Docente` para quien revisa solicitudes de docencia), pero solo verificarlo contra el documento oficial del SRS y el esquema de base de datos reveló que era el rol equivocado. Vale la pena, como equipo, contrastar cualquier nombre de rol/actor contra la fuente oficial antes de codificarlo, en vez de asumir por el nombre que suena bien.
+- Un perfil con bypass total (`Superadmin`) es útil para administración, pero inútil (y hasta contraproducente) para validar que las reglas de autorización de un módulo funcionan de verdad — probar "como superadmin" puede dar una falsa sensación de que todo funciona.
+- La convención "código en inglés, datos en español" no es intuitiva para una IA si el prompt solo le da los nombres de rol en español: hay que ser explícito en el prompt sobre qué parte del código debe traducirse y cuál no, en vez de asumir que la IA va a inferir la regla del contexto general del archivo. Esto quedó confirmado como un error real y verificable (no hipotético) de la IA en este proyecto.
+- Delegar la implementación a una sesión de terminal aparte (con un prompt autocontenido y explícito) y luego revisar el `diff` como paso separado permitió detectar este error antes del commit — revisar el resultado, no solo confiar en que "corrió sin errores", sigue siendo responsabilidad del equipo.
+- Queda pendiente, documentado explícitamente para no perderlo: el scoping por dueño en `RequestPolicy` (para que `Estudiante` solo vea sus propias solicitudes) y una vista dedicada "Mis Solicitudes" — ninguno de los dos se implementó en este ciclo a propósito, para mantener el commit acotado a la creación de perfiles.
+
+---
