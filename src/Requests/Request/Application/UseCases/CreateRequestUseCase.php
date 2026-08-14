@@ -8,7 +8,10 @@ use Src\Requests\Request\Application\DTOs\RequestDTO;
 use Src\Requests\Request\Domain\Contracts\RequestAttachmentRepositoryInterface;
 use Src\Requests\Request\Domain\Contracts\RequestRepositoryInterface;
 use Src\Requests\Request\Domain\Entities\Request;
+use Src\Requests\Request\Domain\Exceptions\DuplicateWaiverRequestException;
+use Src\Requests\Request\Domain\Services\WaiverEngine;
 use Src\Requests\ValidationPrecedent\Domain\Contracts\ValidationPrecedentRepositoryInterface;
+use Src\Requests\WaiverRule\Domain\Contracts\WaiverRuleRepositoryInterface;
 
 /**
  * Single-purpose orchestrator (SRP): turns a RequestDTO into a persisted
@@ -16,16 +19,15 @@ use Src\Requests\ValidationPrecedent\Domain\Contracts\ValidationPrecedentReposit
  * the concrete adapters are wired in by the container (see
  * App\Providers\DomainServiceProvider).
  *
- * Running the waiver/validation engine to auto-resolve the request is
- * intentionally NOT done here — that belongs to a dedicated Domain
- * Service invoked from this UseCase once it exists. For now every
- * request is created in 'Pending Review' and resolved manually via
- * ChangeRequestStatusUseCase.
+ * For waiver requests, runs the WaiverEngine (ES-01) to compute the
+ * immediate `engineResult`/`violatedRuleId` shown to the student. This
+ * never changes `status`: every request — auto-resolved or not — still
+ * starts 'Pending Review' and requires a human reviewer at Docencia to
+ * close it (see Request::create()'s docblock for why).
  *
- * The ValidationPrecedent lookup below is NOT that engine: it only
- * links a pre-existing catalog resolution (if any) to the new request
- * for the Docencia inbox to see later — it never changes `status` or
- * `engineResult`, both of which stay untouched until the engine exists.
+ * The ValidationPrecedent lookup is a separate, unrelated concern: it
+ * only links a pre-existing catalog resolution (if any) to a new
+ * Validation request for the Docencia inbox to see later.
  */
 final class CreateRequestUseCase
 {
@@ -33,10 +35,16 @@ final class CreateRequestUseCase
         private readonly RequestRepositoryInterface $repository,
         private readonly RequestAttachmentRepositoryInterface $attachmentRepository,
         private readonly ValidationPrecedentRepositoryInterface $validationPrecedentRepository,
+        private readonly WaiverRuleRepositoryInterface $waiverRuleRepository,
+        private readonly WaiverEngine $waiverEngine,
     ) {}
 
     public function handle(RequestDTO $dto): Request
     {
+        [$engineResult, $violatedRuleId] = $dto->type === 'Requirement Waiver'
+            ? $this->runWaiverEngine($dto)
+            : [null, null];
+
         $request = Request::create(
             studentId: $dto->studentId,
             type: $dto->type,
@@ -45,6 +53,8 @@ final class CreateRequestUseCase
             originInstitution: $dto->originInstitution,
             externalCourse: $dto->externalCourse,
             validationPrecedentId: $this->resolveValidationPrecedentId($dto),
+            engineResult: $engineResult,
+            violatedRuleId: $violatedRuleId,
         );
 
         $saved = $this->repository->save($request);
@@ -54,6 +64,25 @@ final class CreateRequestUseCase
         }
 
         return $saved;
+    }
+
+    /**
+     * @return array{0: string, 1: int|null}
+     */
+    private function runWaiverEngine(RequestDTO $dto): array
+    {
+        if (
+            $dto->requiredCourseId !== null
+            && $this->repository->existsApprovedWaiver($dto->studentId, $dto->courseId, $dto->requiredCourseId)
+        ) {
+            throw DuplicateWaiverRequestException::create();
+        }
+
+        $rules = $this->waiverRuleRepository->all(sortBy: 'order', courseId: $dto->courseId);
+
+        $decision = $this->waiverEngine->evaluate($dto->studentId, $rules);
+
+        return [$decision->result(), $decision->violatedRuleId()];
     }
 
     private function resolveValidationPrecedentId(RequestDTO $dto): ?int

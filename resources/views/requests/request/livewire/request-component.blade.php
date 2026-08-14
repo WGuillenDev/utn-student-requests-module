@@ -136,6 +136,10 @@
             </select>
         </div>
         <div class="form-field">
+            <label for="reviewEstimatedDate">{{ __('Estimated resolution date') }} <span style="opacity:.6;">({{ __('optional — auto-assigned after 24h if left blank') }})</span></label>
+            <input type="date" id="reviewEstimatedDate" wire:model="reviewEstimatedDate">
+        </div>
+        <div class="form-field">
             <label for="reviewComment">{{ __('Comment') }} <span style="opacity:.6;">({{ __('required to deny') }})</span></label>
             <textarea id="reviewComment" wire:model="reviewComment" class="{{ $errors->has('reviewComment') ? 'has-error' : '' }}"></textarea>
             @error('reviewComment') <span class="form-error">{{ $message }}</span> @enderror

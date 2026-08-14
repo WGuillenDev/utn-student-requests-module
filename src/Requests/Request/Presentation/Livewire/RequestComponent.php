@@ -43,6 +43,8 @@ class RequestComponent extends Component
 
     public string $reviewComment = '';
 
+    public string $reviewEstimatedDate = '';
+
     public RequestForm $form;
 
     public function mount(): void
@@ -86,6 +88,7 @@ class RequestComponent extends Component
         $this->reviewingId = $id;
         $this->reviewStatus = $request->status();
         $this->reviewComment = '';
+        $this->reviewEstimatedDate = $request->estimatedResolutionDate() ?? '';
         $this->resetValidation();
         $this->showReviewModal = true;
     }
@@ -112,6 +115,7 @@ class RequestComponent extends Component
                 newStatus: $this->reviewStatus,
                 reviewerId: Auth::id(),
                 comment: $this->reviewComment !== '' ? $this->reviewComment : null,
+                estimatedResolutionDate: $this->reviewEstimatedDate !== '' ? $this->reviewEstimatedDate : null,
             );
         } catch (InvalidStatusTransitionException $e) {
             $this->dispatch('toast', variant: 'danger', text: $e->getMessage());

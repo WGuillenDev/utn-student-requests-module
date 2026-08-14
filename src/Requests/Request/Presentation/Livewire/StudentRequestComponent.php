@@ -17,6 +17,7 @@ use Src\Requests\Request\Application\UseCases\CreateRequestUseCase;
 use Src\Requests\Request\Application\UseCases\FindRequestUseCase;
 use Src\Requests\Request\Application\UseCases\ListRequestsUseCase;
 use Src\Requests\Request\Domain\Entities\Request;
+use Src\Requests\Request\Domain\Exceptions\DuplicateWaiverRequestException;
 use Src\Requests\Request\Presentation\Livewire\Forms\ValidationRequestForm;
 use Src\Requests\Request\Presentation\Livewire\Forms\WaiverRequestForm;
 
@@ -48,6 +49,8 @@ class StudentRequestComponent extends Component
     public string $successType = '';
 
     public string $successCourse = '';
+
+    public ?string $successEngineResult = null;
 
     public bool $showViewModal = false;
 
@@ -120,10 +123,16 @@ class StudentRequestComponent extends Component
 
         $course = $this->courseLabel($this->waiverForm->courseId);
 
-        $useCase->handle($this->waiverForm->toDto($this->studentId()));
+        try {
+            $request = $useCase->handle($this->waiverForm->toDto($this->studentId()));
+        } catch (DuplicateWaiverRequestException) {
+            $this->addError('waiverForm.requiredCourseId', __('This waiver has already been processed previously.'));
+
+            return;
+        }
 
         $this->waiverForm->reset();
-        $this->openSuccessModal('Requirement Waiver', $course);
+        $this->openSuccessModal('Requirement Waiver', $course, $request->engineResult());
     }
 
     public function submitValidation(CreateRequestUseCase $useCase): void
@@ -189,10 +198,11 @@ class StudentRequestComponent extends Component
         ]);
     }
 
-    private function openSuccessModal(string $type, string $course): void
+    private function openSuccessModal(string $type, string $course, ?string $engineResult = null): void
     {
         $this->successType = $type;
         $this->successCourse = $course;
+        $this->successEngineResult = $engineResult;
         $this->showSuccessModal = true;
     }
 

@@ -40,8 +40,17 @@ final class Request
         private string $status,
         private ?string $estimatedResolutionDate,
         private ?int $reviewerId,
+        private readonly ?string $createdAt,
     ) {}
 
+    /**
+     * `engineResult`/`violatedRuleId` may be populated at creation by
+     * the WaiverEngine (ES-01's immediate result shown to the student).
+     * `status` always starts 'Pending Review' regardless — by design,
+     * every request (auto-resolved or not) still requires a human
+     * reviewer at Docencia to close it, so it stays visible in the
+     * ES-04 inbox and gets a proper user+date audit trail (ES-03).
+     */
     public static function create(
         int $studentId,
         string $type,
@@ -50,6 +59,8 @@ final class Request
         ?string $originInstitution = null,
         ?string $externalCourse = null,
         ?int $validationPrecedentId = null,
+        ?string $engineResult = null,
+        ?int $violatedRuleId = null,
     ): self {
         return new self(
             id: null,
@@ -60,11 +71,12 @@ final class Request
             originInstitution: $originInstitution,
             externalCourse: $externalCourse,
             validationPrecedentId: $validationPrecedentId,
-            engineResult: null,
-            violatedRuleId: null,
+            engineResult: $engineResult,
+            violatedRuleId: $violatedRuleId,
             status: 'Pending Review',
             estimatedResolutionDate: null,
             reviewerId: null,
+            createdAt: null,
         );
     }
 
@@ -82,6 +94,7 @@ final class Request
         string $status,
         ?string $estimatedResolutionDate,
         ?int $reviewerId,
+        ?string $createdAt = null,
     ): self {
         return new self(
             id: $id,
@@ -97,6 +110,7 @@ final class Request
             status: $status,
             estimatedResolutionDate: $estimatedResolutionDate,
             reviewerId: $reviewerId,
+            createdAt: $createdAt,
         );
     }
 
@@ -122,6 +136,53 @@ final class Request
     public function isFinal(): bool
     {
         return in_array($this->status, self::FINAL_STATUSES, true);
+    }
+
+    /**
+     * Manual entry: "la fecha estimada de resolución la ingresa el
+     * revisor al abrir la solicitud" (ES-03). Deliberately not gated by
+     * `isFinal()` — the reviewer sets this while still deciding, before
+     * or independently of a status change.
+     */
+    public function assignEstimatedResolutionDate(string $date): void
+    {
+        $this->estimatedResolutionDate = $date;
+    }
+
+    /**
+     * ES-03's automatic fallback: true once 24h have passed since
+     * receipt with no date entered by a reviewer, for a request still
+     * open (a closed request no longer needs an estimate).
+     */
+    public function needsAutoEstimatedDate(\DateTimeImmutable $now): bool
+    {
+        if ($this->estimatedResolutionDate !== null || $this->createdAt === null || $this->isFinal()) {
+            return false;
+        }
+
+        return $now->getTimestamp() - (new \DateTimeImmutable($this->createdAt))->getTimestamp() >= 86400;
+    }
+
+    /**
+     * "5 días hábiles a partir de la fecha de recepción" — Monday
+     * through Friday, counted from `createdAt`. No holiday calendar:
+     * out of scope for this module, same as the course catalog's
+     * documented scope cuts.
+     */
+    public function autoAssignEstimatedResolutionDate(): void
+    {
+        $date = new \DateTimeImmutable($this->createdAt);
+        $businessDaysAdded = 0;
+
+        while ($businessDaysAdded < 5) {
+            $date = $date->modify('+1 day');
+
+            if ((int) $date->format('N') < 6) {
+                $businessDaysAdded++;
+            }
+        }
+
+        $this->estimatedResolutionDate = $date->format('Y-m-d');
     }
 
     public function id(): ?int
@@ -187,5 +248,10 @@ final class Request
     public function reviewerId(): ?int
     {
         return $this->reviewerId;
+    }
+
+    public function createdAt(): ?string
+    {
+        return $this->createdAt;
     }
 }

@@ -4,9 +4,13 @@ namespace Database\Seeders;
 
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CareerModel;
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
+use App\Infrastructure\Persistence\Eloquent\Academic\Models\StudyPlanModel;
+use App\Infrastructure\Persistence\Eloquent\Students\Models\AcademicRecordModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
+use App\Models\User;
 use Faker\Factory as FakerFactory;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Manual QA fixtures for the Requests module: enough students and courses
@@ -38,7 +42,7 @@ class TestDataSeeder extends Seeder
                 'lab_type' => null,
                 'active' => true,
             ],
-        ));
+        ))->keyBy('code');
 
         // Spanish locale for test names/national IDs: these are seed
         // *data* (like the career names above), not code — the project's
@@ -54,5 +58,81 @@ class TestDataSeeder extends Seeder
                 'active' => true,
             ]);
         }
+
+        $this->seedWaiverEngineFixtures($career, $courses);
+    }
+
+    /**
+     * Fixtures wired specifically to the `estudiante@gmail.com` demo user
+     * (see RoleSeeder/DatabaseSeeder) and the 3 rule-engine outcomes
+     * (ES-01): ISW-521 is configured to auto-Approve, ISW-401 to
+     * auto-Deny, and ISW-315 is left with no rules at all so it falls
+     * through to manual review — exercising all three in the UI without
+     * the reviewer having to fabricate data by hand before the demo.
+     *
+     * @param \Illuminate\Support\Collection<string, CourseModel> $courses
+     */
+    private function seedWaiverEngineFixtures(CareerModel $career, \Illuminate\Support\Collection $courses): void
+    {
+        $demoUser = User::query()->where('email', 'estudiante@gmail.com')->first();
+
+        if ($demoUser === null) {
+            return;
+        }
+
+        $demoStudent = StudentModel::query()->firstOrCreate(
+            ['user_id' => $demoUser->id],
+            [
+                'national_id' => '0-0000-0000',
+                'name' => 'Estudiante',
+                'last_name' => 'Demo',
+                'second_last_name' => 'UTN',
+                'active' => true,
+            ],
+        );
+
+        // ISW-102 approved with a high grade — satisfies the ISW-521
+        // waiver rule below (min grade 70).
+        AcademicRecordModel::query()->firstOrCreate(
+            ['student_id' => $demoStudent->id, 'course_id' => $courses['ISW-102']->id],
+            ['status' => 'Approved', 'grade' => 85],
+        );
+
+        // ISW-210 approved but with a grade below the ISW-401 waiver
+        // rule's threshold (min grade 90) — deliberately fails it.
+        AcademicRecordModel::query()->firstOrCreate(
+            ['student_id' => $demoStudent->id, 'course_id' => $courses['ISW-210']->id],
+            ['status' => 'Approved', 'grade' => 60],
+        );
+
+        DB::table('waiver_rules')->updateOrInsert(
+            ['course_id' => $courses['ISW-521']->id, 'order' => 1],
+            [
+                'type' => 'Approved requirement with minimum grade',
+                'required_course_id' => $courses['ISW-102']->id,
+                'minimum_grade' => 70,
+                'minimum_accumulated' => null,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        );
+
+        DB::table('waiver_rules')->updateOrInsert(
+            ['course_id' => $courses['ISW-401']->id, 'order' => 1],
+            [
+                'type' => 'Approved requirement with minimum grade',
+                'required_course_id' => $courses['ISW-210']->id,
+                'minimum_grade' => 90,
+                'minimum_accumulated' => null,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        );
+
+        // ISW-315 intentionally left without any waiver_rules row —
+        // exercises the "curso sin criterios configurados" acceptance
+        // criterion (falls through to manual review).
     }
 }

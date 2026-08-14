@@ -255,6 +255,9 @@
     <x-ui.success-modal :show="$showSuccessModal" :title="__('Request submitted!')" close-action="closeSuccessModal">
         <p>{{ __('Type') }}: {{ __($successType) }}</p>
         <p>{{ __('Course') }}: {{ $successCourse }}</p>
+        @if ($successEngineResult)
+        <p>{{ __('Immediate result') }}: <strong>{{ __($successEngineResult) }}</strong></p>
+        @endif
         <span class="status-badge pending">{{ __('Pending Review') }}</span>
     </x-ui.success-modal>
 

@@ -957,6 +957,7 @@ select:focus[data-flux-control] {
     color: var(--textPrimary);
   }
   .form-field input[type="text"],
+  .form-field input[type="date"],
   .form-field textarea,
   .form-field select {
     padding: 10px 12px;
@@ -973,6 +974,7 @@ select:focus[data-flux-control] {
     color: var(--textPrimary);
   }
   .form-field input[type="text"]:focus,
+  .form-field input[type="date"]:focus,
   .form-field textarea:focus {
     outline: none;
     border-color: var(--primary);

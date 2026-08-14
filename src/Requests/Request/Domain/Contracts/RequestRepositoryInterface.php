@@ -49,4 +49,10 @@ interface RequestRepositoryInterface
     public function save(Request $request): Request;
 
     public function delete(int $id): void;
+
+    /**
+     * ES-01's duplicate check: whether this student already has an
+     * Approved waiver for the exact same course + unmet requirement.
+     */
+    public function existsApprovedWaiver(int $studentId, int $courseId, int $requiredCourseId): bool;
 }

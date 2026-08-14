@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Requests\Request\Application\UseCases;
 
+use Src\Requests\Request\Application\Services\EstimatedResolutionDateAssigner;
 use Src\Requests\Request\Domain\Contracts\RequestRepositoryInterface;
 use Src\Requests\Request\Domain\Entities\Request;
 
@@ -11,6 +12,7 @@ final class ListRequestsUseCase
 {
     public function __construct(
         private readonly RequestRepositoryInterface $repository,
+        private readonly EstimatedResolutionDateAssigner $estimatedResolutionDateAssigner,
     ) {}
 
     /**
@@ -18,7 +20,9 @@ final class ListRequestsUseCase
      */
     public function all(?string $search = null, ?string $sortBy = null, string $sortDir = 'asc'): array
     {
-        return $this->repository->all($search, $sortBy, $sortDir);
+        return $this->estimatedResolutionDateAssigner->ensureAssignedForAll(
+            $this->repository->all($search, $sortBy, $sortDir),
+        );
     }
 
     /**
@@ -31,7 +35,11 @@ final class ListRequestsUseCase
         ?string $sortBy = null,
         string $sortDir = 'asc',
     ): array {
-        return $this->repository->paginate($search, $perPage, $page, $sortBy, $sortDir);
+        $result = $this->repository->paginate($search, $perPage, $page, $sortBy, $sortDir);
+
+        $result['items'] = $this->estimatedResolutionDateAssigner->ensureAssignedForAll($result['items']);
+
+        return $result;
     }
 
     /**
@@ -44,6 +52,10 @@ final class ListRequestsUseCase
         ?string $sortBy = null,
         string $sortDir = 'asc',
     ): array {
-        return $this->repository->paginateForStudent($studentId, $perPage, $page, $sortBy, $sortDir);
+        $result = $this->repository->paginateForStudent($studentId, $perPage, $page, $sortBy, $sortDir);
+
+        $result['items'] = $this->estimatedResolutionDateAssigner->ensureAssignedForAll($result['items']);
+
+        return $result;
     }
 }

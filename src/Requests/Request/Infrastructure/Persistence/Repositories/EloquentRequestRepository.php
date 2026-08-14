@@ -98,6 +98,7 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         $model->engine_result = $request->engineResult();
         $model->violated_rule_id = $request->violatedRuleId();
         $model->status = $request->status();
+        $model->estimated_resolution_date = $request->estimatedResolutionDate();
         $model->reviewer_id = $request->reviewerId();
         $model->save();
 
@@ -107,6 +108,17 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
     public function delete(int $id): void
     {
         RequestModel::query()->whereKey($id)->delete();
+    }
+
+    public function existsApprovedWaiver(int $studentId, int $courseId, int $requiredCourseId): bool
+    {
+        return RequestModel::query()
+            ->where('student_id', $studentId)
+            ->where('type', 'Requirement Waiver')
+            ->where('course_id', $courseId)
+            ->where('required_course_id', $requiredCourseId)
+            ->where('status', 'Approved')
+            ->exists();
     }
 
     private function baseQuery(?string $search): \Illuminate\Database\Eloquent\Builder
@@ -145,6 +157,7 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
             status: $model->status,
             estimatedResolutionDate: $model->estimated_resolution_date?->toDateString(),
             reviewerId: $model->reviewer_id,
+            createdAt: $model->created_at?->toDateTimeString(),
         );
     }
 }

@@ -24,11 +24,20 @@ final class ChangeRequestStatusUseCase
         private readonly RequestStatusHistoryRepositoryInterface $historyRepository,
     ) {}
 
-    public function handle(int $requestId, string $newStatus, ?int $reviewerId = null, ?string $comment = null): Request
-    {
+    public function handle(
+        int $requestId,
+        string $newStatus,
+        ?int $reviewerId = null,
+        ?string $comment = null,
+        ?string $estimatedResolutionDate = null,
+    ): Request {
         $request = $this->repository->find($requestId) ?? throw RequestNotFoundException::withId($requestId);
 
         $previousStatus = $request->status();
+
+        if ($estimatedResolutionDate !== null) {
+            $request->assignEstimatedResolutionDate($estimatedResolutionDate);
+        }
 
         $request->changeStatus($newStatus, $reviewerId);
         $saved = $this->repository->save($request);

@@ -23,7 +23,6 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             CareerSeeder::class,
             AcademicPeriodSeeder::class,
-            TestDataSeeder::class,
         ]);
 
         $superadminUser = User::factory()->create([
@@ -75,5 +74,10 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $teachingCoordinatorUser->roles()->sync([$teachingCoordinatorRole->id]);
+
+        // Runs last, not in the $this->call() block above: its waiver-
+        // engine fixtures are keyed to the estudiante@gmail.com user
+        // created just above, and would silently no-op if seeded first.
+        $this->call(TestDataSeeder::class);
     }
 }
