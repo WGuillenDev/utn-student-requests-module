@@ -216,3 +216,54 @@ Se verificó, en ambos intentos, con:
 - Volver a probar en el navegador después de cada cambio, en vez de encadenar varias correcciones antes de verificar, permitió aislar rápidamente que el primer cambio no había sido el culpable real.
 
 ---
+
+## Entrada — 14 de agosto de 2026 (continuación)
+**Tema:** Validación en tiempo real de archivos adjuntos, subida por arrastrar-y-soltar (drag-and-drop) y botón para quitar un archivo mal adjuntado, en el portal de estudiante
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso al navegador (Chrome) para reproducir y verificar cada cambio
+
+---
+
+### 1. Qué se le consultó a la IA
+
+En la misma sesión de trabajo, se reportaron dos bugs adicionales observados manualmente en `/mis-solicitudes`:
+1. Al adjuntar un archivo superior a 5MB en "Nueva solicitud de levantamiento" o "Nueva solicitud de convalidación", el sistema lo deja seleccionar sin avisar nada; el error debería aparecer justo debajo del botón "Seleccionar archivo".
+2. En la solicitud de convalidación (3 documentos obligatorios), al enviar sin archivos aparecen correctamente los 3 errores "obligatorio"; pero al adjuntar los archivos uno por uno para corregirlo, el error rojo del campo ya adjuntado se queda ahí en vez de quitarse.
+
+Se le pidió a la IA que primero probara ambos bugs en el navegador para confirmar el problema antes de proponer nada. Después, ya con ambos corregidos, se le consultó qué se podía hacer para agregar arrastrar-y-soltar (drag-and-drop) "como en los sistemas modernos", y luego un botón pequeño de "×" para quitar un archivo mal adjuntado sin tener que recargar la página.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Reprodujo ambos bugs en el navegador antes de tocar código: subió un PDF de 6MB sintético (generado con PowerShell) al campo de levantamiento y confirmó que no aparecía ningún error hasta hacer clic en "Enviar solicitud" — el backend sí rechazaba el archivo (`max:5120` ya existía en `WaiverRequestForm`/`ValidationRequestForm`), pero solo al final del flujo, no al seleccionar el archivo. Luego reprodujo el segundo bug en convalidación: adjuntó un PDF válido en "Programa del curso externo" después de un envío fallido y confirmó que el mensaje "es obligatorio" seguía visible pese a que el archivo ya estaba adjunto.
+2. Diagnosticó que ambos bugs comparten la misma causa: Livewire no revalida un campo de archivo cuando el usuario lo cambia, solo cuando se llama `validate()` en el envío completo del formulario. La corrección fue un hook `updated(string $property)` en `StudentRequestComponent` que llama a `$this->validateOnly($property)` en cuanto cambia cualquiera de los 4 campos de archivo — Livewire detecta automáticamente que la propiedad pertenece a un Form Object y delega la validación a las reglas ya existentes ahí, sin duplicarlas.
+3. Verificó, leyendo el código fuente de Livewire (`HandlesValidation::validateOnly`), que al validar un campo con éxito el framework limpia automáticamente (`resetErrorBag`) solo el error de ese campo específico — confirmando, antes de escribir nada, que este único hook resolvía los dos bugs a la vez (error inmediato + limpieza automática del error viejo).
+4. Para el drag-and-drop, explicó la opción elegida (envolver el `<input type="file">` existente en una zona con Alpine.js, ya incluido vía Livewire) frente a la alternativa de usar la API `$wire.upload()` de Livewire directamente, señalando que esta última duplicaría la validación que ya vive en los Form Objects.
+5. Para el botón de quitar archivo, identificó que un `<input type="file">` nativo no se puede "limpiar" con una X propia por CSS/JS simple — la solución es ocultar el input y mostrar una "pastilla" (nombre + botón ×) cuando el archivo es válido, y que el botón llame a un método Livewire que ponga la propiedad en `null`.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El hook `updated()` con `validateOnly()` para las 4 validaciones en tiempo real, y el mensaje verde "Archivo adjuntado" (`.form-success`) cuando el campo queda válido.
+- El patrón de drag-and-drop reutilizando el mismo `<input>` y `wire:model` ya existentes (vía `x-ref` + `DataTransfer` + `dispatchEvent(new Event('change'))`), en vez de un uploader paralelo.
+- El método genérico `removeFile(string $field)` (con una lista blanca `FILE_FIELDS`, la misma ya usada por el hook `updated()`) en vez de 4 métodos repetidos, uno por campo.
+- El patrón de "pastilla" (`.file-chip`) con el nombre del archivo y un botón × reutilizando los colores de "eliminar" (`--actionDeleteBg`/`--actionDeleteText`) ya existentes en el sistema, en vez de introducir una paleta nueva.
+
+### 4. Qué se rechazó y por qué
+
+- Se rechazó (implícitamente, al no pedirlo) usar `$wire.upload()` para el drag-and-drop: habría significado mantener dos caminos de subida y validación en paralelo para el mismo campo.
+- Se rechazó dejar el hook `updated()` genérico sin una lista blanca de campos: la IA lo acotó a los 4 campos de archivo conocidos (`FILE_FIELDS`) en vez de revalidar cualquier propiedad que cambie, para no disparar validaciones innecesarias en otros campos del formulario (curso, institución, etc.) que no las necesitan.
+
+### 5. Qué hubo que corregir o verificar manualmente — el error real de la IA
+
+Después de implementar el drag-and-drop, el equipo notó un efecto visual roto: el texto nativo del navegador ("Ningún archivo seleccionado") aparecía cortado con puntos suspensivos ("Ningún archi...eleccionado"). Este es un bug que **la propia IA introdujo** al envolver el `<input type="file">` en el nuevo `<div class="dropzone">`.
+
+La causa: `.form-field` es `display:flex; flex-direction:column`, y antes del cambio el `<input>` era hijo *directo* de ese contenedor, por lo que el `align-items: stretch` por defecto de flexbox lo estiraba al ancho completo (~520px), dándole al navegador espacio de sobra para mostrar el texto completo. Al envolverlo en `.dropzone` (un `div` normal, no flex), el input dejó de ser hijo directo del flex y volvió a su ancho nativo/intrínseco, mucho más angosto — y Chrome trunca con "..." el texto de su propio control nativo cuando no le entra. La IA no anticipó este efecto colateral de layout al proponer el wrapper; lo detectó el equipo visualmente, no la IA de forma proactiva. Se corrigió agregando `.dropzone input[type="file"] { display:block; width:100%; }` para restaurar el mismo ancho de antes.
+
+También se verificó, dado que las herramientas de automatización de navegador no pueden simular un arrastre real de archivos desde el sistema operativo, el flujo de drop completo mediante un archivo sintético (`new File(...)` + `DataTransfer` + evento `drop` disparado por JavaScript) en ambas pestañas y en el botón de quitar — confirmando visualmente en cada caso el estado esperado (pastilla verde, error limpiado, vuelta a la zona de arrastre tras quitar).
+
+### 6. Qué se aprendió del proceso
+
+- Un solo hook de validación en tiempo real (`updated()` + `validateOnly()`) resolvió dos bugs reportados por separado porque compartían la misma causa raíz — vale la pena, antes de corregir síntomas por separado, confirmar si comparten un origen común.
+- Envolver un elemento nativo (`<input type="file">`) en un contenedor nuevo puede romper silenciosamente el layout que dependía de que ese elemento fuera hijo *directo* de un contenedor flex — este tipo de regresión no se detecta leyendo el código, solo probando visualmente después de cada cambio de estructura HTML, como ya se había aprendido en la entrada anterior del mismo día.
+- Cuando una herramienta de prueba no puede replicar una interacción real del usuario (arrastrar un archivo del sistema operativo), simular el evento del navegador con datos sintéticos (`DataTransfer`, eventos `drop`/`change` disparados por JS) es una alternativa válida para verificar la lógica de la aplicación, siempre que quede documentado que no prueba la interacción de bajo nivel del sistema operativo, solo la reacción de la aplicación al evento.
+
+---
