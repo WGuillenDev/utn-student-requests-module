@@ -82,6 +82,7 @@ select:focus[data-flux-control] {
 
 @layer components {
   :root {
+    color-scheme: light;
     --appBg: #eef2f9;
     --sidebarBg: #ffffff;
     --sidebarBorder: #e4e9f5;
@@ -120,6 +121,7 @@ select:focus[data-flux-control] {
     --actionDeleteText: #b42318;
   }
   [data-theme="dark"] {
+    color-scheme: dark;
     --appBg: #060d1c;
     --sidebarBg: #0c1830;
     --sidebarBorder: #2a3f68;
@@ -955,7 +957,8 @@ select:focus[data-flux-control] {
     color: var(--textPrimary);
   }
   .form-field input[type="text"],
-  .form-field textarea {
+  .form-field textarea,
+  .form-field select {
     padding: 10px 12px;
     border-radius: 8px;
     border: 1px solid var(--border);
@@ -964,6 +967,10 @@ select:focus[data-flux-control] {
     font-size: 13.5px;
     font-family: inherit;
     width: 100%;
+  }
+  .form-field select option {
+    background: var(--cardBg);
+    color: var(--textPrimary);
   }
   .form-field input[type="text"]:focus,
   .form-field textarea:focus {
