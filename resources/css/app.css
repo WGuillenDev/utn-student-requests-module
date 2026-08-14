@@ -1014,6 +1014,65 @@ select:focus[data-flux-control] {
     font-size: 12.5px;
     color: var(--logout);
   }
+  .form-success {
+    font-size: 12.5px;
+    color: var(--badgeCustomText);
+  }
+  .dropzone {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone input[type="file"] {
+    display: block;
+    width: 100%;
+  }
+  .dropzone-active {
+    border-color: var(--primary);
+    background: var(--primarySoft);
+  }
+  .dropzone-hint {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--textMuted);
+  }
+  .file-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--cardBg);
+  }
+  .file-chip-name {
+    font-size: 13.5px;
+    color: var(--textPrimary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-chip-remove {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: var(--actionDeleteBg);
+    color: var(--actionDeleteText);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .file-chip-remove:hover {
+    background: var(--delCancelBg);
+    color: #fff;
+  }
   .permissions-list {
     margin-top: 10px;
     border: 1px solid var(--border);

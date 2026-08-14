@@ -45,8 +45,32 @@
 
             <div class="form-field">
                 <label for="waiverSupportDocument">{{ __('Supporting document') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
-                <input type="file" id="waiverSupportDocument" wire:model="waiverForm.supportDocument" class="{{ $errors->has('waiverForm.supportDocument') ? 'has-error' : '' }}">
-                @error('waiverForm.supportDocument') <span class="form-error">{{ $message }}</span> @enderror
+                @if ($waiverForm->supportDocument && ! $errors->has('waiverForm.supportDocument'))
+                    <div class="file-chip">
+                        <span class="file-chip-name">{{ $waiverForm->supportDocument->getClientOriginalName() }}</span>
+                        <button type="button" class="file-chip-remove" wire:click="removeFile('waiverForm.supportDocument')" aria-label="{{ __('Remove file') }}">&times;</button>
+                    </div>
+                @else
+                    <div
+                        x-data="{ dragging: false }"
+                        x-on:dragover.prevent="dragging = true"
+                        x-on:dragleave.prevent="dragging = false"
+                        x-on:drop.prevent="
+                            dragging = false;
+                            $refs.waiverSupportDocument.files = $event.dataTransfer.files;
+                            $refs.waiverSupportDocument.dispatchEvent(new Event('change'));
+                        "
+                        :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                    >
+                        <input type="file" id="waiverSupportDocument" x-ref="waiverSupportDocument" wire:model="waiverForm.supportDocument" class="{{ $errors->has('waiverForm.supportDocument') ? 'has-error' : '' }}">
+                        <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                    </div>
+                @endif
+                @error('waiverForm.supportDocument')
+                    <span class="form-error">{{ $message }}</span>
+                @elseif ($waiverForm->supportDocument)
+                    <span class="form-success">{{ __('File attached') }}</span>
+                @enderror
             </div>
 
             <div>
@@ -87,20 +111,92 @@
 
             <div class="form-field">
                 <label for="validationExternalProgram">{{ __('External course syllabus') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
-                <input type="file" id="validationExternalProgram" wire:model="validationForm.externalProgramFile" class="{{ $errors->has('validationForm.externalProgramFile') ? 'has-error' : '' }}">
-                @error('validationForm.externalProgramFile') <span class="form-error">{{ $message }}</span> @enderror
+                @if ($validationForm->externalProgramFile && ! $errors->has('validationForm.externalProgramFile'))
+                    <div class="file-chip">
+                        <span class="file-chip-name">{{ $validationForm->externalProgramFile->getClientOriginalName() }}</span>
+                        <button type="button" class="file-chip-remove" wire:click="removeFile('validationForm.externalProgramFile')" aria-label="{{ __('Remove file') }}">&times;</button>
+                    </div>
+                @else
+                    <div
+                        x-data="{ dragging: false }"
+                        x-on:dragover.prevent="dragging = true"
+                        x-on:dragleave.prevent="dragging = false"
+                        x-on:drop.prevent="
+                            dragging = false;
+                            $refs.validationExternalProgram.files = $event.dataTransfer.files;
+                            $refs.validationExternalProgram.dispatchEvent(new Event('change'));
+                        "
+                        :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                    >
+                        <input type="file" id="validationExternalProgram" x-ref="validationExternalProgram" wire:model="validationForm.externalProgramFile" class="{{ $errors->has('validationForm.externalProgramFile') ? 'has-error' : '' }}">
+                        <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                    </div>
+                @endif
+                @error('validationForm.externalProgramFile')
+                    <span class="form-error">{{ $message }}</span>
+                @elseif ($validationForm->externalProgramFile)
+                    <span class="form-success">{{ __('File attached') }}</span>
+                @enderror
             </div>
 
             <div class="form-field">
                 <label for="validationGradeCertification">{{ __('Grade certification') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
-                <input type="file" id="validationGradeCertification" wire:model="validationForm.gradeCertificationFile" class="{{ $errors->has('validationForm.gradeCertificationFile') ? 'has-error' : '' }}">
-                @error('validationForm.gradeCertificationFile') <span class="form-error">{{ $message }}</span> @enderror
+                @if ($validationForm->gradeCertificationFile && ! $errors->has('validationForm.gradeCertificationFile'))
+                    <div class="file-chip">
+                        <span class="file-chip-name">{{ $validationForm->gradeCertificationFile->getClientOriginalName() }}</span>
+                        <button type="button" class="file-chip-remove" wire:click="removeFile('validationForm.gradeCertificationFile')" aria-label="{{ __('Remove file') }}">&times;</button>
+                    </div>
+                @else
+                    <div
+                        x-data="{ dragging: false }"
+                        x-on:dragover.prevent="dragging = true"
+                        x-on:dragleave.prevent="dragging = false"
+                        x-on:drop.prevent="
+                            dragging = false;
+                            $refs.validationGradeCertification.files = $event.dataTransfer.files;
+                            $refs.validationGradeCertification.dispatchEvent(new Event('change'));
+                        "
+                        :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                    >
+                        <input type="file" id="validationGradeCertification" x-ref="validationGradeCertification" wire:model="validationForm.gradeCertificationFile" class="{{ $errors->has('validationForm.gradeCertificationFile') ? 'has-error' : '' }}">
+                        <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                    </div>
+                @endif
+                @error('validationForm.gradeCertificationFile')
+                    <span class="form-error">{{ $message }}</span>
+                @elseif ($validationForm->gradeCertificationFile)
+                    <span class="form-success">{{ __('File attached') }}</span>
+                @enderror
             </div>
 
             <div class="form-field">
                 <label for="validationInstitutionProof">{{ __('Institution proof') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
-                <input type="file" id="validationInstitutionProof" wire:model="validationForm.institutionProofFile" class="{{ $errors->has('validationForm.institutionProofFile') ? 'has-error' : '' }}">
-                @error('validationForm.institutionProofFile') <span class="form-error">{{ $message }}</span> @enderror
+                @if ($validationForm->institutionProofFile && ! $errors->has('validationForm.institutionProofFile'))
+                    <div class="file-chip">
+                        <span class="file-chip-name">{{ $validationForm->institutionProofFile->getClientOriginalName() }}</span>
+                        <button type="button" class="file-chip-remove" wire:click="removeFile('validationForm.institutionProofFile')" aria-label="{{ __('Remove file') }}">&times;</button>
+                    </div>
+                @else
+                    <div
+                        x-data="{ dragging: false }"
+                        x-on:dragover.prevent="dragging = true"
+                        x-on:dragleave.prevent="dragging = false"
+                        x-on:drop.prevent="
+                            dragging = false;
+                            $refs.validationInstitutionProof.files = $event.dataTransfer.files;
+                            $refs.validationInstitutionProof.dispatchEvent(new Event('change'));
+                        "
+                        :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                    >
+                        <input type="file" id="validationInstitutionProof" x-ref="validationInstitutionProof" wire:model="validationForm.institutionProofFile" class="{{ $errors->has('validationForm.institutionProofFile') ? 'has-error' : '' }}">
+                        <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                    </div>
+                @endif
+                @error('validationForm.institutionProofFile')
+                    <span class="form-error">{{ $message }}</span>
+                @elseif ($validationForm->institutionProofFile)
+                    <span class="form-success">{{ __('File attached') }}</span>
+                @enderror
             </div>
 
             <div>

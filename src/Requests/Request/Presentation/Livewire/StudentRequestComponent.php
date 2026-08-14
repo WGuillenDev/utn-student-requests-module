@@ -71,6 +71,49 @@ class StudentRequestComponent extends Component
         $this->activeTab = in_array($tab, ['waiver', 'validation', 'my-requests'], true) ? $tab : 'waiver';
     }
 
+    /**
+     * @var array<int, string>
+     */
+    private const FILE_FIELDS = [
+        'waiverForm.supportDocument',
+        'validationForm.externalProgramFile',
+        'validationForm.gradeCertificationFile',
+        'validationForm.institutionProofFile',
+    ];
+
+    /**
+     * Real-time validation for file inputs: without this hook, a chosen
+     * file (oversized, wrong type, or a valid replacement) is only
+     * checked when the whole form is submitted, so the "max 5MB" error
+     * never shows until then, and a stale "required" error for an
+     * already-attached file lingers until the next full submit attempt.
+     */
+    public function updated(string $property): void
+    {
+        if (in_array($property, self::FILE_FIELDS, true)) {
+            $this->validateOnly($property);
+        }
+    }
+
+    /**
+     * Lets the student discard an already-attached file (e.g. picked the
+     * wrong one) and go back to the empty dropzone, instead of having to
+     * submit with it or reload the page. $field is "form.property" as
+     * used by wire:model, e.g. "waiverForm.supportDocument".
+     */
+    public function removeFile(string $field): void
+    {
+        if (! in_array($field, self::FILE_FIELDS, true)) {
+            return;
+        }
+
+        [$form, $property] = explode('.', $field, 2);
+
+        $this->{$form}->{$property} = null;
+
+        $this->resetErrorBag($field);
+    }
+
     public function submitWaiver(CreateRequestUseCase $useCase): void
     {
         $this->waiverForm->validate();
