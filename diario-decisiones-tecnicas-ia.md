@@ -267,3 +267,58 @@ También se verificó, dado que las herramientas de automatización de navegador
 - Cuando una herramienta de prueba no puede replicar una interacción real del usuario (arrastrar un archivo del sistema operativo), simular el evento del navegador con datos sintéticos (`DataTransfer`, eventos `drop`/`change` disparados por JS) es una alternativa válida para verificar la lógica de la aplicación, siempre que quede documentado que no prueba la interacción de bajo nivel del sistema operativo, solo la reacción de la aplicación al evento.
 
 ---
+
+## Entrada — 14 de agosto de 2026 (motor de reglas y fecha estimada)
+**Tema:** Conexión del motor de reglas de ES-01 (waiver engine), detección de duplicados, y la fecha estimada de resolución de ES-03 (entrada manual + asignación automática tras 24h)
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso al navegador para probar en vivo con los 3 perfiles (Estudiante, Docencia, Superadmin)
+
+---
+
+### 1. Qué se le consultó a la IA
+
+El docente pidió que todos los CRUDs del proyecto estuvieran listos para una revisión al día siguiente (15 de agosto). Se le pidió a la IA verificar si el CRUD del perfil Estudiante estaba completo. Al confirmar que faltaba el motor de reglas de ES-01 (ver entrada de contexto más abajo), se le pidió conectarlo, con una aclaración explícita de negocio: **toda solicitud enviada debe quedar en estado "Pendiente" hasta que Docencia la revise y decida** — no debía auto-resolverse aunque el motor concluyera un resultado. Después se le pidió resolver también la fecha estimada de resolución de ES-03 (entrada manual del revisor + asignación automática tras 24h), dejando explícitamente fuera del alcance de esta sesión la notificación por correo electrónico (esa se dejó documentada para un tercer avance posterior del curso, no para la entrega de mañana).
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Antes de tocar código, releyó el documento oficial del proyecto completo (extraído manualmente del `.docx` con `unzip` + `sed`, ya que no hay Python instalado en este entorno) para confirmar los criterios de aceptación exactos de ES-01, ES-03 y ES-04, en vez de trabajar de memoria.
+2. Verificó, probando en el navegador como Estudiante, que el motor de reglas no evaluaba nada: toda solicitud quedaba "Pendiente de revisión" sin importar las reglas configuradas — confirmado además por un comentario explícito ya existente en `CreateRequestUseCase.php` ("Running the waiver/validation engine... is intentionally NOT done here").
+3. Encontró que la infraestructura de datos para el motor ya existía sin usarse: la entidad `Request` ya tenía los campos `engineResult`/`violatedRuleId`, y el repositorio ya los persistía — solo faltaba la lógica de evaluación y quién la llamara.
+4. Ante la ambigüedad del spec sobre si el motor debía cerrar la solicitud automáticamente o no, la IA no asumió una respuesta: preguntó directamente al equipo. Al recibir la regla de negocio (todo queda Pendiente hasta que Docencia decida), señaló que esa decisión, además, concilia mejor ES-01 con ES-04 (que exige que **toda** solicitud, no solo las no concluyentes, aparezca en la bandeja de Docencia) — algo que no era obvio a primera lectura de ES-01 en aislamiento.
+5. Para la fecha estimada, revisó `routes/console.php` (sin comandos programados) y el modal de revisión existente (sin campo de fecha), confirmando que ninguna de las dos partes del criterio de ES-03 estaba implementada.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El diseño del motor (`WaiverEngine` como Domain Service puro + `StudentAcademicProfileRepositoryInterface` como puerto + adaptador Eloquent), con la decisión documentada de que la primera regla *activa* en orden es la autoritativa (evita ambigüedad sobre qué pasa con reglas subsecuentes).
+- La detección de duplicados antes de correr el motor, con el mensaje exacto del spec ("Este levantamiento ya fue procesado previamente").
+- Que `status` nunca se autorresuelva — el `engineResult` queda como sugerencia visible para Docencia, no como una acción automática.
+- Aplicar la asignación automática de fecha estimada de forma perezosa (al leer una solicitud), no vía un job programado — así funciona de forma confiable en la demo sin depender de que un scheduler esté corriendo.
+- Reutilizar el modal de revisión ya existente para que el revisor ingrese la fecha, en vez de construir una pantalla nueva.
+
+### 4. Qué se rechazó y por qué
+
+- **Se rechazó implementar la notificación por correo de ES-03 en esta sesión.** El equipo aclaró explícitamente que esa funcionalidad corresponde a un tercer avance posterior del curso, no a la entrega de mañana — aunque la IA ya había investigado el gap (confirmó que no existe ningún `Mail::`/`Notification::`/`Mailable` en el proyecto) y lo tenía listo para proponer, se frenó la implementación a pedido del equipo.
+- Se rechazó que la IA decidiera por su cuenta el comportamiento de auto-resolución del motor — se le pidió la regla de negocio explícitamente en vez de dejarla inferir del spec.
+
+### 5. Qué hubo que corregir o verificar manualmente — el error real de la IA
+
+Al escribir por primera vez las fixtures de prueba del motor en `TestDataSeeder.php` (curso + reglas + expediente académico del estudiante demo), la IA asumió que ese seeder corría **después** de que `DatabaseSeeder` creara el usuario `estudiante@gmail.com`. En realidad corría **antes**: `TestDataSeeder` estaba en el bloque `$this->call([...])` inicial, y los 4 usuarios de prueba (incluido `estudiante@gmail.com`) se creaban más abajo, fuera de ese bloque. El código tenía un guard silencioso (`if ($demoUser === null) { return; }`) que hizo que las fixtures del motor se saltaran sin ningún error visible en la consola — `migrate:fresh --seed` terminó con "DONE" en todos los seeders, dando la falsa impresión de que todo se había sembrado correctamente.
+
+El error se detectó únicamente porque, en vez de confiar en la salida de la consola, se verificó directamente contra la base de datos (`DB::table('waiver_rules')->count()` devolvió `0` cuando debía ser `2`). Se corrigió moviendo la llamada a `TestDataSeeder` al final de `DatabaseSeeder::run()`, después de crear los 4 usuarios.
+
+También se detectó, verificando el código existente antes de dar por completa la nueva funcionalidad, que `EloquentRequestRepository::save()` nunca escribía la columna `estimated_resolution_date` — un bug preexistente (no introducido en esta sesión) que habría hecho que cualquier fecha ingresada por el revisor se perdiera silenciosamente al guardar. Se corrigió como parte del mismo cambio.
+
+Se verificó todo con datos reales, no solo lectura de código:
+- Los 3 resultados del motor (Aprobado/Denegado/Revisión manual), probados en vivo como Estudiante contra un expediente académico sembrado a propósito con notas específicas.
+- El flujo de duplicados de punta a punta: aprobar una solicitud como Docencia, reintentar el mismo levantamiento como Estudiante, y confirmar tanto el mensaje en pantalla como que no se creó una fila nueva en `requests`.
+- El cálculo de "5 días hábiles" contra un calendario real (jueves 13 de agosto + 5 días hábiles, saltando el fin de semana, da jueves 20 de agosto) — no se asumió que la lógica de fechas estuviera bien solo porque compilaba.
+
+### 6. Qué se aprendió del proceso
+
+- Un comentario de diseño ya escrito en el código ("intentionally NOT done here") es más confiable que inferir del nombre de una clase si algo está implementado — vale la pena leerlos antes de dar por completo un requerimiento.
+- Un guard silencioso en un seeder (`if (...) return;`) es peligroso si el resultado no se verifica contra la base de datos real: la consola puede reportar éxito aunque la lógica interna nunca haya corrido.
+- Frente a una regla de negocio ambigua en el spec (¿el motor cierra la solicitud o no?), preguntar directamente al equipo evitó construir algo que hubiera que rehacer — y en este caso la respuesta del equipo terminó siendo la que mejor concilia dos requerimientos (ES-01 y ES-04) que a primera vista parecían apuntar en direcciones distintas.
+- Aplicar una corrección de forma perezosa (al leer, no por un job programado) es una estrategia más segura para una demo en vivo cuando no se puede garantizar que un proceso en segundo plano esté corriendo.
+- Documentar explícitamente qué se deja fuera de una sesión a propósito (como la notificación por correo, pospuesta a un tercer avance) es tan importante como documentar qué se hizo — evita que en una sesión futura, o en la defensa oral, se confunda una decisión de alcance con un olvido.
+
+---
