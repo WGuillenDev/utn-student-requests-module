@@ -169,3 +169,50 @@ Después de la corrección, se verificó:
 - Queda pendiente, documentado explícitamente para no perderlo: el scoping por dueño en `RequestPolicy` (para que `Estudiante` solo vea sus propias solicitudes) y una vista dedicada "Mis Solicitudes" — ninguno de los dos se implementó en este ciclo a propósito, para mantener el commit acotado a la creación de perfiles.
 
 ---
+
+## Entrada — 14 de agosto de 2026
+**Tema:** Diagnóstico y corrección de un bug de legibilidad en los `<select>` del portal de estudiante en modo oscuro
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso al navegador (Chrome) para reproducir el bug visualmente
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Se reportó, de forma informal, un bug observado manualmente en el portal de estudiante (`/mis-solicitudes`) con el tema oscuro activado: al abrir cualquiera de los `<select>` del formulario de nueva solicitud ("Curso a matricular", "Requisito no cumplido", "Curso interno equivalente"), la lista de opciones se veía casi en blanco sobre blanco, ilegible. Se le pidió a la IA que reprodujera el bug y propusiera cómo solucionarlo.
+
+### 2. Qué encontró la IA antes de actuar — incluyendo un diagnóstico inicial incorrecto
+
+1. La IA reprodujo el bug en un navegador real controlado por Claude Code (login como Estudiante, abrir el formulario, abrir el `<select>`, capturar pantalla) antes de tocar una sola línea de código.
+2. **Primer diagnóstico (incorrecto):** revisando `resources/css/app.css`, notó que el bloque `.form-field` estiliza `label`, `input[type="text"]`, `textarea` e `input[type="file"]`, pero no tiene ninguna regla para `select`. Concluyó que la causa era la ausencia de la propiedad CSS `color-scheme` en `:root`/`[data-theme="dark"]`, que le indica al navegador si debe dibujar los controles nativos (incluida la lista desplegable de un `<select>`) en variante clara u oscura. Propuso agregar `color-scheme: light` / `color-scheme: dark` a esos dos bloques.
+3. Con autorización explícita del equipo ("sí hazlo tú"), aplicó ese cambio y volvió a probar en el navegador. **El bug seguía exactamente igual** — el desplegable seguía blanco sobre blanco.
+4. En vez de dar el cambio por bueno solo porque "sonaba correcto", la IA verificó con JavaScript en la página real (`getComputedStyle`) que `color-scheme: dark` sí se estaba aplicando correctamente al `<select>` (confirmado: `colorScheme: "dark"`), lo que descartó su propia primera hipótesis — el problema no era que faltara `color-scheme`.
+5. Comparó el `<select>` roto contra otro que sí funciona en el resto del sistema (`.control-group select`, usado en los filtros de las pantallas CRUD) y encontró la diferencia real: `.control-group select` sí define `background: var(--cardBg)` explícito, mientras que `.form-field select` no define ningún fondo y queda transparente. Con fondo transparente, Chromium no pinta nada detrás de las opciones del desplegable nativo, así que se ve el blanco por defecto del sistema operativo con el texto claro (heredado de `--textPrimary` en modo oscuro) casi invisible encima.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El diagnóstico final (fondo transparente en `.form-field select`, no ausencia de `color-scheme`), una vez verificado en el navegador con capturas de pantalla y `getComputedStyle`.
+- La corrección aplicada: agregar `select` a la regla existente `.form-field input[type="text"], .form-field textarea` (mismo `background: var(--cardBg)`, `color: var(--textPrimary)`) y una regla explícita `.form-field select option { background: var(--cardBg); color: var(--textPrimary); }`.
+- Mantener también el cambio de `color-scheme` (aunque no fue la causa raíz), por ser buena práctica general para otros controles nativos (scrollbars, checkboxes) que si dependen de esa propiedad.
+- La verificación visual final: se probaron los tres `<select>` del portal (levantamiento y convalidación) en modo oscuro, con capturas de pantalla mostrando texto blanco legible sobre fondo azul oscuro en cada opción.
+
+### 4. Qué se rechazó y por qué
+
+- Se rechazó dar por cerrado el bug después del primer cambio (`color-scheme`) solo porque era la explicación más "de manual" — el equipo esperó a que la IA repitiera la prueba visual en el navegador antes de aceptar la corrección, y esa misma prueba fue la que reveló que el primer intento no había funcionado.
+
+### 5. Qué hubo que corregir o verificar manualmente — el error real de la IA
+
+Este es el caso concreto de error de la IA para esta entrada: **el primer diagnóstico y su corrección (`color-scheme`) fueron incorrectos.** La IA razonó por analogía con la causa más conocida/documentada de este tipo de bug (falta de `color-scheme` para forzar controles nativos oscuros) sin antes comparar el `<select>` roto contra un `<select>` que sí funciona dentro del mismo proyecto. Ese paso de comparación —que hubiera sido más rápido y habría llevado directo a la causa real— se hizo únicamente *después* de que la primera corrección fallara la prueba visual, no antes.
+
+Se verificó, en ambos intentos, con:
+- Capturas de pantalla (`zoom`) del `<select>` abierto, antes y después de cada cambio.
+- `getComputedStyle` ejecutado en vivo sobre la página para confirmar qué propiedades CSS se estaban aplicando realmente (`color-scheme`, `color`, `background-color`) en el `<select>` y en sus `<option>`, en lugar de asumir el resultado a partir del CSS fuente.
+
+### 6. Qué se aprendió del proceso
+
+- Un diagnóstico "razonable" o "de manual" (`color-scheme` para dark mode en controles nativos) no reemplaza la verificación empírica: la única forma de confirmar que una corrección de CSS realmente funciona es probarla visualmente en el navegador contra el bug original, no solo revisar que el código "se ve correcto".
+- Comparar el elemento roto contra un elemento equivalente que sí funciona en el mismo proyecto (`.control-group select` vs. `.form-field select`) fue más eficaz para encontrar la causa raíz que razonar desde documentación general sobre CSS y navegadores — vale la pena aplicar esa comparación como primer paso la próxima vez, antes de proponer una corrección basada en teoría.
+- `color-scheme` en CSS afecta la apariencia por defecto de controles nativos, pero no sustituye un `background-color` explícito cuando el elemento (o sus ancestros) deja el fondo transparente: en Chromium, un `<select>` con fondo transparente no hereda un fondo oscuro solo por `color-scheme: dark`, porque el navegador sigue mostrando su lienzo nativo (blanco) detrás del texto heredado.
+- Volver a probar en el navegador después de cada cambio, en vez de encadenar varias correcciones antes de verificar, permitió aislar rápidamente que el primer cambio no había sido el culpable real.
+
+---
