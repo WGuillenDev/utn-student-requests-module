@@ -322,3 +322,48 @@ Se verificó todo con datos reales, no solo lectura de código:
 - Documentar explícitamente qué se deja fuera de una sesión a propósito (como la notificación por correo, pospuesta a un tercer avance) es tan importante como documentar qué se hizo — evita que en una sesión futura, o en la defensa oral, se confunda una decisión de alcance con un olvido.
 
 ---
+
+## Entrada — 14 de agosto de 2026 (escaneo de CRUDs y permisos de Docencia)
+**Tema:** Escaneo completo de los CRUD del proyecto por perfil (Estudiante, Docencia, Superadmin/Admin) de cara al avance del 15 de agosto, y corrección de un permiso faltante en `RoleSeeder.php`
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso al navegador para probar los 3 perfiles en vivo
+
+---
+
+### 1. Qué se le consultó a la IA
+
+El equipo pidió, en varios pasos: (1) confirmar que los CRUD de los perfiles Docencia y Superadmin estuvieran listos para el avance de mañana (solo la parte de persistencia/CRUD — se aclaró explícitamente que lo funcional del motor de reglas se deja para otro avance); (2) investigar si el rol Admin y Superadmin, al terminar ambos con acceso total, eran un diseño redundante o un error; (3) verificar esa respuesta contra la plantilla oficial del profesor (`C:\SIGA-UTN- RepoProfe\SIGA`), no solo contra el manual.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Escaneando la estructura completa del proyecto (`src/*/*/Presentation/Livewire`), identificó los 5 CRUD reales del sistema: Roles, Permisos (ambos del starter kit, no del módulo del equipo), Reglas de Levantamiento, Convalidaciones de Cursos y la Bandeja de solicitudes — más la pantalla de autoservicio del Estudiante, que es Create+Read por diseño, no un CRUD completo.
+2. Revisando `RoleSeeder.php`, encontró que el rol "Coordinadora de Docencia" no tenía ningún permiso `validation_precedents.*` — el link ni aparecía en su menú y la URL directa daba "Acceso denegado". Lo cruzó contra el documento oficial: ES-04 dice que la bandeja de Docencia agrupa "todas las solicitudes estudiantiles (levantamientos y convalidaciones)", lo que implica que Docencia ya opera el flujo completo de convalidaciones vía revisión (`requests.review`), pero no podía tocar el catálogo de precedentes que alimenta esa misma revisión.
+3. Sobre la pregunta sí Admin/Superadmin son redundantes: primero encontró en `Manual - Como crear un CRUD nuevo en SIGA-UTN.docx` (extraído a texto plano porque no hay Python en el entorno para usar una librería docx) una cita textual que sugería que Admin debía arrancar **sin ningún permiso**, asignado manualmente después vía UI — lo cual, de ser cierto, habría significado que el proyecto se desvió del patrón documentado.
+4. En vez de aplicar esa cita directamente, la IA fue a verificarla contra el código real del profesor en `C:\SIGA-UTN- RepoProfe\SIGA` (a pedido explícito del equipo) y encontró que el propio `DatabaseSeeder.php` del profesor —no solo `RoleSeeder.php`— sincroniza el 100% de los permisos a Admin para la cuenta de prueba `admin@gmail.com`, exactamente igual que el proyecto del equipo. La cita del manual describe el comportamiento de `RoleSeeder.php` **aislado** (útil para quien solo corre ese seeder), no el comportamiento real del sistema completo tras `DatabaseSeeder.php`.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El diagnóstico de los 5 CRUD reales del sistema y cuáles corresponden al alcance del equipo (Solicitudes Estudiantiles) versus cuáles son plantilla compartida del profesor (Roles, Permisos, y las demás secciones del sidebar como Oferta académica, Docentes, Aulas, Grupos, Riesgos, Reportes).
+- Extender `RoleSeeder.php` dándole a Docencia los 4 permisos `validation_precedents.create/view/edit/delete`, en vez de crear un rol nuevo "Comisión Técnica de Convalidaciones" (que el spec nombra literalmente para ES-02 pero que el sistema nunca implementó como rol separado).
+- La conclusión final de que Admin/Superadmin no requieren ningún cambio: coinciden exactamente con el repo de referencia del profesor.
+
+### 4. Qué se rechazó y por qué
+
+- Se rechazó aplicar el cambio sugerido por la primera lectura del manual (hacer que Admin arrancara sin permisos) sin antes contrastarlo contra el código real del profesor — el equipo pidió explícitamente "escaneando el proyecto del profe... como lo hizo" en vez de conformarse con la cita de la documentación.
+- Se rechazó, en una ronda anterior de esta misma conversación, crear un rol nuevo "Comisión Técnica" — evaluado como más fiel a la letra del spec, pero de mayor alcance (rol nuevo, usuario demo nuevo) para un problema que ES-04 ya resuelve dándole el flujo completo a Docencia en una sola bandeja.
+- Se rechazó tocar cualquier archivo de los módulos compartidos de la plantilla (Roles, Permisos, `DatabaseSeeder.php`) una vez confirmado que coinciden con el repo del profesor — el equipo fue explícito en que su entrega es solo el módulo de Solicitudes Estudiantiles.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- La cita del manual, tomada de forma aislada, habría llevado a una conclusión incorrecta (que el proyecto tenía una desviación que corregir). Solo comparando línea por línea contra `C:\SIGA-UTN- RepoProfe\SIGA\database\seeders\DatabaseSeeder.php` se confirmó que no había ninguna desviación real — el manual describe un paso intermedio (`RoleSeeder.php` solo), no el resultado final del sistema completo.
+- Se verificó en vivo, logueado como Docencia, que el permiso nuevo realmente habilitaba el acceso: el link "Convalidaciones de Cursos" pasó de no aparecer en el menú a aparecer con el botón "Agregar" disponible.
+- Se verificó, tras crear y eliminar un rol de prueba ("Rol de Prueba QA") durante el escaneo de CRUD, que no quedó ningún dato residual: se confirmó contra la base de datos que persisten exactamente los 4 roles originales, los 36 permisos originales, y cero filas huérfanas en la tabla pivote `permission_role`.
+- Se corrió la suite de tests (32/33, la única falla preexistente y no relacionada) después del cambio en `RoleSeeder.php` para confirmar que no introdujo regresiones.
+
+### 6. Qué se aprendió del proceso
+
+- Una cita de documentación, aunque sea del propio profesor, puede describir un paso intermedio del proceso y no el comportamiento final del sistema — vale la pena verificar contra el código real (cuando está disponible) antes de aplicar un cambio basado solo en el texto de un manual.
+- Separar con claridad qué es "nuestro módulo" de qué es "plantilla compartida" evitó dos horas de posible trabajo innecesario: sin esa distinción, el equipo podría haber intentado rediseñar el sistema de Admin/Superadmin, que no era su responsabilidad y que, además, resultó estar ya correctamente alineado con el repo de referencia.
+- Verificar que una prueba en vivo (crear+eliminar un rol de prueba) no dejó residuos, contrastando contra la base de datos real, es la misma disciplina aplicada en entradas anteriores del diario: no asumir que "no dio error" significa "quedó limpio".
+
+---
