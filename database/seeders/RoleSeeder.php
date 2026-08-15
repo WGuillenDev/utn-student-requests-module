@@ -38,6 +38,10 @@ class RoleSeeder extends Seeder
                 'waiver_rules.view',
                 'waiver_rules.edit',
                 'waiver_rules.delete',
+                'validation_precedents.create',
+                'validation_precedents.view',
+                'validation_precedents.edit',
+                'validation_precedents.delete',
             ])->pluck('id')
         );
     }
