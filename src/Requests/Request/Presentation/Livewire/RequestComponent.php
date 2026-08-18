@@ -6,6 +6,8 @@ namespace Src\Requests\Request\Presentation\Livewire;
 
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CareerModel;
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
+use App\Infrastructure\Persistence\Eloquent\Documents\Models\FileModel;
+use App\Infrastructure\Persistence\Eloquent\Requests\Models\RequestModel;
 use App\Infrastructure\Persistence\Eloquent\Requests\Models\ValidationPrecedentModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
 use App\Livewire\Concerns\InteractsWithDataTable;
@@ -44,6 +46,20 @@ class RequestComponent extends Component
     public bool $showCreateModal = false;
 
     public bool $showReviewModal = false;
+
+    /**
+     * Read-only detail view — unlike showReviewModal (only available
+     * while a request is still open, since that modal's real purpose
+     * is changing status), this one is available for EVERY request
+     * regardless of status, so Docencia can always look back at a
+     * closed request's full data and attached documents.
+     */
+    public bool $showViewModal = false;
+
+    /**
+     * @var array<string, mixed>|null
+     */
+    public ?array $viewingRequest = null;
 
     public ?int $reviewingId = null;
 
@@ -150,6 +166,61 @@ class RequestComponent extends Component
         $this->showCreateModal = false;
         $this->refreshTable($this->freshRows($listUseCase));
         $this->dispatch('toast', variant: 'success', text: __('Request created.'));
+    }
+
+    /**
+     * Read-only detail — available for any request the user is
+     * authorized to 'view' (RequestPolicy::view()), open or closed.
+     * Builds a plain array (not the domain entity) because the blade
+     * also needs cross-context labels (student name, course label,
+     * precedent resolution, attached documents) that don't belong on
+     * the Request entity itself.
+     */
+    public function openViewModal(int $id, FindRequestUseCase $useCase): void
+    {
+        $request = $useCase->handle($id);
+        $this->authorize('view', $request);
+
+        $students = $this->studentLabelsById();
+        $courses = $this->courseLabelsById();
+
+        $this->viewingRequest = [
+            'id' => $request->id(),
+            'student' => $students[$request->studentId()] ?? (string) $request->studentId(),
+            'type' => $request->type(),
+            'course' => $courses[$request->courseId()] ?? (string) $request->courseId(),
+            'requiredCourse' => $request->requiredCourseId() !== null
+                ? ($courses[$request->requiredCourseId()] ?? (string) $request->requiredCourseId())
+                : null,
+            'originInstitution' => $request->originInstitution(),
+            'externalCourse' => $request->externalCourse(),
+            'engineResult' => $request->engineResult(),
+            'status' => $request->status(),
+            'estimatedResolutionDate' => $request->estimatedResolutionDate(),
+            'submittedAt' => $request->createdAt(),
+            'precedentResolution' => $request->validationPrecedentId() !== null
+                ? ValidationPrecedentModel::query()->find($request->validationPrecedentId())?->resolution_number
+                : null,
+            'documents' => FileModel::query()
+                ->where('fileable_type', RequestModel::class)
+                ->where('fileable_id', $request->id())
+                ->get(['id', 'document_type', 'original_name', 'size_bytes'])
+                ->map(fn (FileModel $file) => [
+                    'id' => $file->id,
+                    'documentType' => $file->document_type,
+                    'originalName' => $file->original_name,
+                    'sizeKb' => (int) round($file->size_bytes / 1024),
+                ])
+                ->all(),
+        ];
+
+        $this->showViewModal = true;
+    }
+
+    public function closeViewModal(): void
+    {
+        $this->showViewModal = false;
+        $this->viewingRequest = null;
     }
 
     public function openReviewModal(int $id, FindRequestUseCase $useCase): void

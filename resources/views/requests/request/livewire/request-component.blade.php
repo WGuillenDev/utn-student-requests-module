@@ -110,8 +110,10 @@
             <span>{{ $request->estimatedResolutionDate() ?? '—' }}</span>
             <div class="actions-cell">
                 <x-ui.row-actions
+                    :can-view="Auth::user()->can('view', $request)"
                     :can-edit="Auth::user()->can('review', $request) && ! $request->isFinal()"
                     :can-delete="Auth::user()->can('delete', $request)"
+                    view-action="$wire.openViewModal({{ $request->id() }})"
                     edit-action="$wire.openReviewModal({{ $request->id() }})"
                     delete-id="{{ $request->id() }}" />
             </div>
@@ -184,6 +186,91 @@
     </x-ui.modal>
 
     {{-- Review modal (the real "edit" of this CRUD: change status, not fields) --}}
+    {{-- Read-only detail — available for every request regardless of
+         status, so closed requests remain reviewable after the fact. --}}
+    <x-ui.modal :show="$showViewModal" :title="__('Request detail')" close-action="closeViewModal">
+        @if ($viewingRequest)
+        <div class="form-field">
+            <label>{{ __('Student') }}</label>
+            <p>{{ $viewingRequest['student'] }}</p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('Type') }}</label>
+            <p>{{ match ($viewingRequest['type']) {
+                    'Requirement Waiver' => __('Requirement Waiver'),
+                    'Validation' => __('Course Validation'),
+                    default => $viewingRequest['type'],
+                } }}</p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('Course') }}</label>
+            <p>{{ $viewingRequest['course'] }}</p>
+        </div>
+        @if ($viewingRequest['type'] === 'Requirement Waiver')
+        <div class="form-field">
+            <label>{{ __('Unmet requirement') }}</label>
+            <p>{{ $viewingRequest['requiredCourse'] ?? '—' }}</p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('Engine result') }}</label>
+            <p>{{ $viewingRequest['engineResult'] ? __($viewingRequest['engineResult']) : __('Requires manual review') }}</p>
+        </div>
+        @else
+        <div class="form-field">
+            <label>{{ __('Origin institution') }}</label>
+            <p>{{ $viewingRequest['originInstitution'] ?? '—' }}</p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('External course name') }}</label>
+            <p>{{ $viewingRequest['externalCourse'] ?? '—' }}</p>
+        </div>
+        @if ($viewingRequest['precedentResolution'])
+        <div class="form-field">
+            <div class="status-badge positive" style="display:inline-flex;">
+                {{ __('Approved precedent found in the historical catalog') }} — {{ __('Reference resolution') }}: {{ $viewingRequest['precedentResolution'] }}
+            </div>
+        </div>
+        @endif
+        @endif
+        <div class="form-field">
+            <label>{{ __('Status') }}</label>
+            <p><span class="status-badge {{ match(true) {
+                    $viewingRequest['status'] === 'Approved' => 'positive',
+                    $viewingRequest['status'] === 'Denied' => 'negative',
+                    default => 'pending',
+                } }}">{{ __($viewingRequest['status']) }}</span></p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('Estimated resolution date') }}</label>
+            <p>{{ $viewingRequest['estimatedResolutionDate'] ?? '—' }}</p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('Submitted') }}</label>
+            <p>{{ $viewingRequest['submittedAt'] ?? '—' }}</p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('Attached documents') }}</label>
+            @if (count($viewingRequest['documents']) === 0)
+            <p style="opacity:.6;">{{ __('No documents attached') }}</p>
+            @else
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                @foreach ($viewingRequest['documents'] as $document)
+                <a href="{{ route('requests.request.attachment-download', ['fileId' => $document['id']]) }}"
+                   target="_blank"
+                   class="file-chip"
+                   style="text-decoration:none;">
+                    <span class="file-chip-name">{{ $document['originalName'] }} ({{ $document['sizeKb'] }} KB)</span>
+                </a>
+                @endforeach
+            </div>
+            @endif
+        </div>
+        @endif
+        <x-slot:footer>
+            <button type="button" class="btn btn-secondary" wire:click="closeViewModal">{{ __('Close') }}</button>
+        </x-slot:footer>
+    </x-ui.modal>
+
     <x-ui.modal :show="$showReviewModal" :title="__('Review request')" close-action="closeReviewModal">
         @if ($reviewPrecedentResolution !== null)
         <div class="form-field">
