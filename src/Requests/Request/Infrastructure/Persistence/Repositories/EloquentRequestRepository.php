@@ -26,9 +26,9 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         return $model ? $this->toDomain($model) : null;
     }
 
-    public function all(?string $search = null, ?string $sortBy = null, string $sortDir = 'asc'): array
+    public function all(?string $search = null, ?string $sortBy = null, string $sortDir = 'asc', array $filters = []): array
     {
-        $query = $this->baseQuery($search);
+        $query = $this->baseQuery($search, $filters);
 
         $column = in_array($sortBy, self::SORTABLE_COLUMNS, true) ? $sortBy : 'created_at';
         $direction = $sortDir === 'desc' ? 'desc' : 'asc';
@@ -45,8 +45,9 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         int $page,
         ?string $sortBy = null,
         string $sortDir = 'asc',
+        array $filters = [],
     ): array {
-        $query = $this->baseQuery($search);
+        $query = $this->baseQuery($search, $filters);
 
         $column = in_array($sortBy, self::SORTABLE_COLUMNS, true) ? $sortBy : 'created_at';
         $direction = $sortDir === 'desc' ? 'desc' : 'asc';
@@ -121,7 +122,12 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
             ->exists();
     }
 
-    private function baseQuery(?string $search): \Illuminate\Database\Eloquent\Builder
+    /**
+     * @param array<string, mixed> $filters See interface docblock for
+     *   recognized keys — every one is optional and simply skipped when
+     *   absent or empty, so callers can pass a sparse array freely.
+     */
+    private function baseQuery(?string $search, array $filters = []): \Illuminate\Database\Eloquent\Builder
     {
         $query = RequestModel::query()->with('student');
 
@@ -136,6 +142,31 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
                         ->orWhere('code', 'like', "%{$search}%");
                 });
             });
+        }
+
+        if (filled($filters['type'] ?? null)) {
+            $query->where('type', $filters['type']);
+        }
+
+        if (filled($filters['status'] ?? null)) {
+            $query->where('status', $filters['status']);
+        }
+
+        // "Program" (ES-04) is the requested course's owning career — a
+        // request has no direct career column, so this reaches it through
+        // the course relation rather than duplicating the FK on `requests`.
+        if (filled($filters['careerId'] ?? null)) {
+            $query->whereHas('course', function ($courseQuery) use ($filters): void {
+                $courseQuery->where('career_id', $filters['careerId']);
+            });
+        }
+
+        if (filled($filters['dateFrom'] ?? null)) {
+            $query->whereDate('created_at', '>=', $filters['dateFrom']);
+        }
+
+        if (filled($filters['dateTo'] ?? null)) {
+            $query->whereDate('created_at', '<=', $filters['dateTo']);
         }
 
         return $query;

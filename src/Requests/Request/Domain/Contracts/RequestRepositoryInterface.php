@@ -16,11 +16,17 @@ interface RequestRepositoryInterface
     public function find(int $id): ?Request;
 
     /**
+     * @param array<string, mixed> $filters ES-04's inbox filters. Recognized
+     *   keys: 'type' (Request::type()), 'status' (Request::status()),
+     *   'careerId' (the requested course's owning career), 'dateFrom' and
+     *   'dateTo' (received-date range, inclusive, 'Y-m-d'). All optional —
+     *   an absent or empty value is not applied.
      * @return array<int, Request>
      */
-    public function all(?string $search = null, ?string $sortBy = null, string $sortDir = 'asc'): array;
+    public function all(?string $search = null, ?string $sortBy = null, string $sortDir = 'asc', array $filters = []): array;
 
     /**
+     * @param array<string, mixed> $filters See all()'s $filters.
      * @return array{items: array<int, Request>, total: int}
      */
     public function paginate(
@@ -29,6 +35,7 @@ interface RequestRepositoryInterface
         int $page,
         ?string $sortBy = null,
         string $sortDir = 'asc',
+        array $filters = [],
     ): array;
 
     /**

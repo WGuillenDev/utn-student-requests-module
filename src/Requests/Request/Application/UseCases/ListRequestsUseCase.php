@@ -16,16 +16,20 @@ final class ListRequestsUseCase
     ) {}
 
     /**
+     * @param array<string, mixed> $filters ES-04's inbox filters — see
+     *   RequestRepositoryInterface for recognized keys.
      * @return array<int, Request>
      */
-    public function all(?string $search = null, ?string $sortBy = null, string $sortDir = 'asc'): array
+    public function all(?string $search = null, ?string $sortBy = null, string $sortDir = 'asc', array $filters = []): array
     {
         return $this->estimatedResolutionDateAssigner->ensureAssignedForAll(
-            $this->repository->all($search, $sortBy, $sortDir),
+            $this->repository->all($search, $sortBy, $sortDir, $filters),
         );
     }
 
     /**
+     * @param array<string, mixed> $filters ES-04's inbox filters — see
+     *   RequestRepositoryInterface for recognized keys.
      * @return array{items: array<int, Request>, total: int}
      */
     public function paginate(
@@ -34,8 +38,9 @@ final class ListRequestsUseCase
         int $page = 1,
         ?string $sortBy = null,
         string $sortDir = 'asc',
+        array $filters = [],
     ): array {
-        $result = $this->repository->paginate($search, $perPage, $page, $sortBy, $sortDir);
+        $result = $this->repository->paginate($search, $perPage, $page, $sortBy, $sortDir, $filters);
 
         $result['items'] = $this->estimatedResolutionDateAssigner->ensureAssignedForAll($result['items']);
 

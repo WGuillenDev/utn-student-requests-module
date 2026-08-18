@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Requests\Request\Presentation\Livewire;
 
+use App\Infrastructure\Persistence\Eloquent\Academic\Models\CareerModel;
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
 use App\Livewire\Concerns\InteractsWithDataTable;
@@ -47,11 +48,67 @@ class RequestComponent extends Component
 
     public RequestForm $form;
 
+    /**
+     * ES-04: "filterable and sortable by type, program, status, and
+     * received date". Sorting was already covered by InteractsWithDataTable
+     * (type/status/created_at are in EloquentRequestRepository's
+     * SORTABLE_COLUMNS); these four add the missing filter half.
+     */
+    public string $filterType = '';
+
+    public string $filterStatus = '';
+
+    public string $filterCareerId = '';
+
+    public string $filterDateFrom = '';
+
+    public string $filterDateTo = '';
+
     public function mount(): void
     {
         $this->authorize('viewAny', Request::class);
         $this->sortKey = 'created_at';
         $this->sortDir = 'desc';
+    }
+
+    /**
+     * Any filter change starts back at page 1 — same reasoning as
+     * InteractsWithDataTable::updatingSearch(), a stale $page could
+     * otherwise point past the end of a newly-narrowed result set.
+     */
+    public function updatingFilterType(): void
+    {
+        $this->page = 1;
+    }
+
+    public function updatingFilterStatus(): void
+    {
+        $this->page = 1;
+    }
+
+    public function updatingFilterCareerId(): void
+    {
+        $this->page = 1;
+    }
+
+    public function updatingFilterDateFrom(): void
+    {
+        $this->page = 1;
+    }
+
+    public function updatingFilterDateTo(): void
+    {
+        $this->page = 1;
+    }
+
+    public function clearFilters(): void
+    {
+        $this->filterType = '';
+        $this->filterStatus = '';
+        $this->filterCareerId = '';
+        $this->filterDateFrom = '';
+        $this->filterDateTo = '';
+        $this->page = 1;
     }
 
     public function openCreateModal(): void
@@ -160,6 +217,7 @@ class RequestComponent extends Component
             page: $this->page,
             sortBy: $this->sortKey,
             sortDir: $this->sortDir,
+            filters: $this->activeFilters(),
         );
 
         $paginator = new LengthAwarePaginator(
@@ -175,10 +233,25 @@ class RequestComponent extends Component
             'requests' => $paginator,
             'studentOptions' => $this->studentOptions(),
             'courseOptions' => $this->courseOptions(),
+            'careerOptions' => $this->careerOptions(),
         ])->layout('components.layouts.dashboard', [
             'title' => __('Requests'),
             'subtitle' => __('Requirement waivers and course validations submitted by students'),
         ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function activeFilters(): array
+    {
+        return array_filter([
+            'type' => $this->filterType,
+            'status' => $this->filterStatus,
+            'careerId' => $this->filterCareerId,
+            'dateFrom' => $this->filterDateFrom,
+            'dateTo' => $this->filterDateTo,
+        ], fn (string $value): bool => $value !== '');
     }
 
     private function freshRows(ListRequestsUseCase $useCase): array
@@ -231,6 +304,25 @@ class RequestComponent extends Component
             ->map(fn (CourseModel $c) => [
                 'id' => $c->id,
                 'label' => "{$c->code} — {$c->name}",
+            ])
+            ->all();
+    }
+
+    /**
+     * ES-04's "program" filter — populates the career dropdown. Same
+     * cross-context read pattern as studentOptions()/courseOptions().
+     *
+     * @return array<int, array{id: int, label: string}>
+     */
+    private function careerOptions(): array
+    {
+        return CareerModel::query()
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (CareerModel $c) => [
+                'id' => $c->id,
+                'label' => $c->name,
             ])
             ->all();
     }
