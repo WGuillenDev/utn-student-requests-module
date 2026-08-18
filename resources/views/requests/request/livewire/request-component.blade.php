@@ -22,7 +22,7 @@
                 <select id="filterType" wire:model.live="filterType">
                     <option value="">{{ __('All types') }}</option>
                     <option value="Requirement Waiver">{{ __('Requirement Waiver') }}</option>
-                    <option value="Validation">{{ __('Validation') }}</option>
+                    <option value="Validation">{{ __('Course Validation') }}</option>
                 </select>
             </div>
 
@@ -88,7 +88,11 @@
         @forelse ($requests as $request)
         <div class="data-row" role="row">
             <span>{{ $request->studentId() }}</span>
-            <span>{{ __($request->type()) }}</span>
+            <span>{{ match ($request->type()) {
+                    'Requirement Waiver' => __('Requirement Waiver'),
+                    'Validation' => __('Course Validation'),
+                    default => $request->type(),
+                } }}</span>
             <span>{{ $request->courseId() }}</span>
             <span>
                 @php $status = $request->status(); @endphp
@@ -130,7 +134,7 @@
             <label for="requestType">{{ __('Type') }}</label>
             <select id="requestType" wire:model.live="form.type">
                 <option value="Requirement Waiver">{{ __('Requirement Waiver') }}</option>
-                <option value="Validation">{{ __('Validation') }}</option>
+                <option value="Validation">{{ __('Course Validation') }}</option>
             </select>
         </div>
 

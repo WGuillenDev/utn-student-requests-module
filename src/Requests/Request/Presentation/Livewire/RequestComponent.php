@@ -310,7 +310,11 @@ class RequestComponent extends Component
 
         return array_map(fn (Request $request) => [
             'student' => $students[$request->studentId()] ?? (string) $request->studentId(),
-            'type' => __($request->type()),
+            'type' => match ($request->type()) {
+                'Requirement Waiver' => __('Requirement Waiver'),
+                'Validation' => __('Course Validation'),
+                default => $request->type(),
+            },
             'course' => $courses[$request->courseId()] ?? (string) $request->courseId(),
             'status' => __($request->status()),
             'estimatedDate' => $request->estimatedResolutionDate() ?? '',
