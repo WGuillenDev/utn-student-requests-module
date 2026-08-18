@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Requests\Request\Domain\Entities;
 
+use Src\Requests\Request\Domain\Contracts\HolidayCalendarInterface;
 use Src\Requests\Request\Domain\Exceptions\InvalidStatusTransitionException;
 
 /**
@@ -165,11 +166,11 @@ final class Request
 
     /**
      * "5 días hábiles a partir de la fecha de recepción" — Monday
-     * through Friday, counted from `createdAt`. No holiday calendar:
-     * out of scope for this module, same as the course catalog's
-     * documented scope cuts.
+     * through Friday, excluding national holidays as reported by the
+     * injected HolidayCalendarInterface port (see
+     * NagerDateHolidayCalendar for the concrete adapter).
      */
-    public function autoAssignEstimatedResolutionDate(): void
+    public function autoAssignEstimatedResolutionDate(HolidayCalendarInterface $calendar): void
     {
         $date = new \DateTimeImmutable($this->createdAt);
         $businessDaysAdded = 0;
@@ -177,7 +178,7 @@ final class Request
         while ($businessDaysAdded < 5) {
             $date = $date->modify('+1 day');
 
-            if ((int) $date->format('N') < 6) {
+            if ((int) $date->format('N') < 6 && ! $calendar->isHoliday($date)) {
                 $businessDaysAdded++;
             }
         }

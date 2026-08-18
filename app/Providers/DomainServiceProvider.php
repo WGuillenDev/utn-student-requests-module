@@ -29,6 +29,8 @@ final class DomainServiceProvider extends ServiceProvider
         => \Src\Requests\Request\Infrastructure\Persistence\Repositories\EloquentStudentAcademicProfileRepository::class,
         \Src\Requests\Request\Domain\Contracts\RequestNotifierInterface::class
         => \Src\Requests\Request\Infrastructure\Notifications\EloquentRequestNotifier::class,
+        \Src\Requests\Request\Domain\Contracts\HolidayCalendarInterface::class
+        => \Src\Requests\Request\Infrastructure\ExternalServices\NagerDateHolidayCalendar::class,
         \Src\Requests\WaiverRule\Domain\Contracts\WaiverRuleRepositoryInterface::class
         => \Src\Requests\WaiverRule\Infrastructure\Persistence\Repositories\EloquentWaiverRuleRepository::class,
         \Src\Requests\ValidationPrecedent\Domain\Contracts\ValidationPrecedentRepositoryInterface::class
@@ -99,6 +101,10 @@ final class DomainServiceProvider extends ServiceProvider
         }
 
         foreach (File::glob(base_path('src/*/*/Presentation/Routes/web.php')) as $routeFile) {
+            $this->loadRoutesFrom($routeFile);
+        }
+
+        foreach (File::glob(base_path('src/*/*/Presentation/Routes/api.php')) as $routeFile) {
             $this->loadRoutesFrom($routeFile);
         }
     }

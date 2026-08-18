@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Requests\Request\Application\Services;
 
+use Src\Requests\Request\Domain\Contracts\HolidayCalendarInterface;
 use Src\Requests\Request\Domain\Contracts\RequestRepositoryInterface;
 use Src\Requests\Request\Domain\Entities\Request;
 
@@ -18,6 +19,7 @@ final class EstimatedResolutionDateAssigner
 {
     public function __construct(
         private readonly RequestRepositoryInterface $repository,
+        private readonly HolidayCalendarInterface $holidayCalendar,
     ) {}
 
     public function ensureAssigned(Request $request): Request
@@ -26,7 +28,7 @@ final class EstimatedResolutionDateAssigner
             return $request;
         }
 
-        $request->autoAssignEstimatedResolutionDate();
+        $request->autoAssignEstimatedResolutionDate($this->holidayCalendar);
 
         return $this->repository->save($request);
     }
