@@ -6,6 +6,7 @@ namespace Src\Requests\Request\Presentation\Livewire;
 
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CareerModel;
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
+use App\Infrastructure\Persistence\Eloquent\Requests\Models\ValidationPrecedentModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
 use App\Livewire\Concerns\InteractsWithDataTable;
 use App\Livewire\Concerns\InteractsWithExports;
@@ -51,6 +52,14 @@ class RequestComponent extends Component
     public string $reviewComment = '';
 
     public string $reviewEstimatedDate = '';
+
+    /**
+     * ES-02's precedent indicator: the reference resolution number of an
+     * approved catalog precedent linked to the request being reviewed.
+     * Null when the request has no linked precedent (waiver requests,
+     * or validations without an approved precedent match).
+     */
+    public ?string $reviewPrecedentResolution = null;
 
     public RequestForm $form;
 
@@ -152,6 +161,9 @@ class RequestComponent extends Component
         $this->reviewStatus = $request->status();
         $this->reviewComment = '';
         $this->reviewEstimatedDate = $request->estimatedResolutionDate() ?? '';
+        $this->reviewPrecedentResolution = $request->validationPrecedentId() !== null
+            ? ValidationPrecedentModel::query()->find($request->validationPrecedentId())?->resolution_number
+            : null;
         $this->resetValidation();
         $this->showReviewModal = true;
     }
@@ -159,6 +171,7 @@ class RequestComponent extends Component
     public function closeReviewModal(): void
     {
         $this->showReviewModal = false;
+        $this->reviewPrecedentResolution = null;
     }
 
     public function changeStatus(ChangeRequestStatusUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase): void

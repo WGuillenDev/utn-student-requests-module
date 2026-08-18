@@ -92,7 +92,11 @@
                     'Requirement Waiver' => __('Requirement Waiver'),
                     'Validation' => __('Course Validation'),
                     default => $request->type(),
-                } }}</span>
+                } }}
+                @if ($request->validationPrecedentId() !== null)
+                <span class="status-badge positive" title="{{ __('Approved precedent found in the historical catalog') }}">{{ __('Precedent found') }}</span>
+                @endif
+            </span>
             <span>{{ $request->courseId() }}</span>
             <span>
                 @php $status = $request->status(); @endphp
@@ -181,6 +185,13 @@
 
     {{-- Review modal (the real "edit" of this CRUD: change status, not fields) --}}
     <x-ui.modal :show="$showReviewModal" :title="__('Review request')">
+        @if ($reviewPrecedentResolution !== null)
+        <div class="form-field">
+            <div class="status-badge positive" style="display:inline-flex;">
+                {{ __('Approved precedent found in the historical catalog') }} — {{ __('Reference resolution') }}: {{ $reviewPrecedentResolution }}
+            </div>
+        </div>
+        @endif
         <div class="form-field">
             <label for="reviewStatus">{{ __('New status') }}</label>
             <select id="reviewStatus" wire:model="reviewStatus">
