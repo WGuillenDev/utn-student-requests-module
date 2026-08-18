@@ -27,6 +27,8 @@ final class DomainServiceProvider extends ServiceProvider
         => \Src\Requests\Request\Infrastructure\Persistence\Repositories\EloquentRequestAttachmentRepository::class,
         \Src\Requests\Request\Domain\Contracts\StudentAcademicProfileRepositoryInterface::class
         => \Src\Requests\Request\Infrastructure\Persistence\Repositories\EloquentStudentAcademicProfileRepository::class,
+        \Src\Requests\Request\Domain\Contracts\RequestNotifierInterface::class
+        => \Src\Requests\Request\Infrastructure\Notifications\EloquentRequestNotifier::class,
         \Src\Requests\WaiverRule\Domain\Contracts\WaiverRuleRepositoryInterface::class
         => \Src\Requests\WaiverRule\Infrastructure\Persistence\Repositories\EloquentWaiverRuleRepository::class,
         \Src\Requests\ValidationPrecedent\Domain\Contracts\ValidationPrecedentRepositoryInterface::class

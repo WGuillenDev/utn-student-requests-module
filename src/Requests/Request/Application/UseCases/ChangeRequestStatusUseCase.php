@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Requests\Request\Application\UseCases;
 
+use Src\Requests\Request\Domain\Contracts\RequestNotifierInterface;
 use Src\Requests\Request\Domain\Contracts\RequestRepositoryInterface;
 use Src\Requests\Request\Domain\Contracts\RequestStatusHistoryRepositoryInterface;
 use Src\Requests\Request\Domain\Entities\Request;
@@ -22,6 +23,7 @@ final class ChangeRequestStatusUseCase
     public function __construct(
         private readonly RequestRepositoryInterface $repository,
         private readonly RequestStatusHistoryRepositoryInterface $historyRepository,
+        private readonly RequestNotifierInterface $notifier,
     ) {}
 
     public function handle(
@@ -49,6 +51,14 @@ final class ChangeRequestStatusUseCase
             comment: $comment,
             userId: $reviewerId,
         );
+
+        // ES-03: "email notifications on every status change" — every,
+        // not "every save", so this stays out of the block above and is
+        // skipped when a reviewer only sets/edits the estimated date
+        // without actually moving the status (previousStatus === newStatus).
+        if ($previousStatus !== $newStatus) {
+            $this->notifier->notifyStatusChanged($saved, $previousStatus);
+        }
 
         return $saved;
     }
