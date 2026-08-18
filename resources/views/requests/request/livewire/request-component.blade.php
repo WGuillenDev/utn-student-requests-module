@@ -122,7 +122,7 @@
     </x-ui.data-table>
 
     {{-- Create modal --}}
-    <x-ui.modal :show="$showCreateModal" :title="__('New request')">
+    <x-ui.modal :show="$showCreateModal" :title="__('New request')" close-action="closeCreateModal">
         <div class="form-field">
             <label for="requestStudent">{{ __('Student') }}</label>
             <select id="requestStudent" wire:model="form.studentId" class="{{ $errors->has('form.studentId') ? 'has-error' : '' }}">
@@ -184,7 +184,7 @@
     </x-ui.modal>
 
     {{-- Review modal (the real "edit" of this CRUD: change status, not fields) --}}
-    <x-ui.modal :show="$showReviewModal" :title="__('Review request')">
+    <x-ui.modal :show="$showReviewModal" :title="__('Review request')" close-action="closeReviewModal">
         @if ($reviewPrecedentResolution !== null)
         <div class="form-field">
             <div class="status-badge positive" style="display:inline-flex;">
