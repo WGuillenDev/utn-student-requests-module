@@ -27,7 +27,9 @@ return new class extends Migration
             $table->index('document_type');
         });
 
-        DB::statement('ALTER TABLE files ADD CONSTRAINT chk_files_size_bytes CHECK (size_bytes > 0)');
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+    DB::statement('ALTER TABLE files ADD CONSTRAINT chk_files_size_bytes CHECK (size_bytes > 0)');
+}
     }
 
     public function down(): void

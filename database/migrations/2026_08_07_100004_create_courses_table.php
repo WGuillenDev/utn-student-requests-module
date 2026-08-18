@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('courses', function (Blueprint $table) {
+                Schema::create('courses', function (Blueprint $table) {
             $table->id();
             $table->foreignId('career_id')->nullable()->constrained('careers')->restrictOnDelete();
             $table->string('code', 30)->unique()->comment('E.g.: ITI-224, ITIEL-13');
@@ -26,7 +26,9 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        DB::statement('ALTER TABLE courses ADD CONSTRAINT chk_courses_service_career CHECK (is_service = 1 OR career_id IS NOT NULL)');
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE courses ADD CONSTRAINT chk_courses_service_career CHECK (is_service = 1 OR career_id IS NOT NULL)');
+        }
     }
 
     public function down(): void
@@ -34,3 +36,4 @@ return new class extends Migration
         Schema::dropIfExists('courses');
     }
 };
+

@@ -20,7 +20,9 @@ return new class extends Migration
             $table->unique(['year', 'term']);
         });
 
-        DB::statement('ALTER TABLE academic_periods ADD CONSTRAINT chk_academic_periods_term CHECK (term BETWEEN 1 AND 3)');
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+    DB::statement('ALTER TABLE academic_periods ADD CONSTRAINT chk_academic_periods_term CHECK (term BETWEEN 1 AND 3)');
+}
     }
 
     public function down(): void

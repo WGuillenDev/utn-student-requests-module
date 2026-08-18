@@ -22,7 +22,9 @@ return new class extends Migration
             $table->index('classification');
         });
 
-        DB::statement("ALTER TABLE study_plans ADD CONSTRAINT chk_study_plans_terminal_date CHECK (classification = 'Active' OR enrollment_closing_date IS NOT NULL)");
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+    DB::statement("ALTER TABLE study_plans ADD CONSTRAINT chk_study_plans_terminal_date CHECK (classification = 'Active' OR enrollment_closing_date IS NOT NULL)");
+}
 
         Schema::create('levels', function (Blueprint $table) {
             $table->id();
