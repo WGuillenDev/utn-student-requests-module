@@ -8,10 +8,12 @@ use App\Infrastructure\Persistence\Eloquent\Academic\Models\CareerModel;
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
 use App\Livewire\Concerns\InteractsWithDataTable;
+use App\Livewire\Concerns\InteractsWithExports;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Livewire\Component;
 use Src\Requests\Request\Application\UseCases\ChangeRequestStatusUseCase;
 use Src\Requests\Request\Application\UseCases\CreateRequestUseCase;
@@ -21,11 +23,15 @@ use Src\Requests\Request\Application\UseCases\ListRequestsUseCase;
 use Src\Requests\Request\Domain\Entities\Request;
 use Src\Requests\Request\Domain\Exceptions\InvalidStatusTransitionException;
 use Src\Requests\Request\Presentation\Livewire\Forms\RequestForm;
+use Src\Shared\Export\Contracts\ExcelExporterInterface;
+use Src\Shared\Export\Contracts\PdfExporterInterface;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RequestComponent extends Component
 {
     use AuthorizesRequests;
     use InteractsWithDataTable;
+    use InteractsWithExports;
 
     /**
      * Requests grow continuously over time (unlike Role/Permission's
@@ -195,18 +201,36 @@ class RequestComponent extends Component
         $this->dispatch('toast', variant: 'success', text: __('Request deleted.'));
     }
 
-    public function exportPdf(): void
+    /**
+     * Exports honor the inbox's current search + filters + sort — same
+     * "what you see is what you export" expectation as WaiverRuleComponent/
+     * ValidationPrecedentComponent, just unpaginated (the full matching
+     * set, not only the current page).
+     */
+    public function exportPdf(PdfExporterInterface $exporter, ListRequestsUseCase $useCase): StreamedResponse
     {
         $this->authorize('exportPdf', Request::class);
 
-        $this->dispatch('toast', variant: 'info', text: __('Export coming soon.'));
+        return $this->streamPdf(
+            __('Requests'),
+            $this->exportHeaders(),
+            $this->exportableRows($useCase),
+            Str::slug(__('Requests')).'.pdf',
+            $exporter,
+            paperSize: 'letter',
+        );
     }
 
-    public function exportExcel(): void
+    public function exportExcel(ExcelExporterInterface $exporter, ListRequestsUseCase $useCase): StreamedResponse
     {
         $this->authorize('exportExcel', Request::class);
 
-        $this->dispatch('toast', variant: 'info', text: __('Export coming soon.'));
+        return $this->streamExcel(
+            $this->exportHeaders(),
+            $this->exportableRows($useCase),
+            Str::slug(__('Requests')).'.xlsx',
+            $exporter,
+        );
     }
 
     public function render(ListRequestsUseCase $useCase): View
@@ -252,6 +276,68 @@ class RequestComponent extends Component
             'dateFrom' => $this->filterDateFrom,
             'dateTo' => $this->filterDateTo,
         ], fn (string $value): bool => $value !== '');
+    }
+
+    /**
+     * @return array<int, array{key: string, label: string}>
+     */
+    private function exportHeaders(): array
+    {
+        return [
+            ['key' => 'student', 'label' => __('Student')],
+            ['key' => 'type', 'label' => __('Type')],
+            ['key' => 'course', 'label' => __('Course')],
+            ['key' => 'status', 'label' => __('Status')],
+            ['key' => 'estimatedDate', 'label' => __('Estimated date')],
+            ['key' => 'submittedAt', 'label' => __('Submitted')],
+        ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function exportableRows(ListRequestsUseCase $useCase): array
+    {
+        $requests = $useCase->all(
+            search: $this->authorizedSearch(),
+            sortBy: $this->sortKey,
+            sortDir: $this->sortDir,
+            filters: $this->activeFilters(),
+        );
+
+        $courses = $this->courseLabelsById();
+        $students = $this->studentLabelsById();
+
+        return array_map(fn (Request $request) => [
+            'student' => $students[$request->studentId()] ?? (string) $request->studentId(),
+            'type' => __($request->type()),
+            'course' => $courses[$request->courseId()] ?? (string) $request->courseId(),
+            'status' => __($request->status()),
+            'estimatedDate' => $request->estimatedResolutionDate() ?? '',
+            'submittedAt' => $request->createdAt() ?? '',
+        ], $requests);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function courseLabelsById(): array
+    {
+        return CourseModel::query()
+            ->get(['id', 'name', 'code'])
+            ->mapWithKeys(fn (CourseModel $c) => [$c->id => "{$c->code} — {$c->name}"])
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function studentLabelsById(): array
+    {
+        return StudentModel::query()
+            ->get(['id', 'name', 'last_name', 'national_id'])
+            ->mapWithKeys(fn (StudentModel $s) => [$s->id => "{$s->name} {$s->last_name} ({$s->national_id})"])
+            ->all();
     }
 
     private function freshRows(ListRequestsUseCase $useCase): array
