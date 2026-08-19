@@ -367,3 +367,51 @@ El equipo pidió, en varios pasos: (1) confirmar que los CRUD de los perfiles Do
 - Verificar que una prueba en vivo (crear+eliminar un rol de prueba) no dejó residuos, contrastando contra la base de datos real, es la misma disciplina aplicada en entradas anteriores del diario: no asumir que "no dio error" significa "quedó limpio".
 
 ---
+
+## Entrada — 19 de agosto de 2026
+**Tema:** Subida de documentos en el modal "Nueva solicitud" de la bandeja de Docencia (feedback del profesor en el 2do avance) y aclaración del flujo lógico de creación de solicitudes por rol
+**Participantes:** Equipo de desarrollo ISW-521 (un integrante trabajando sobre los puntos 1 y 2 de un plan repartido con su compañero)
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso al navegador (Chrome real del usuario) para probar en vivo
+
+---
+
+### 1. Qué se le consultó a la IA
+
+El profesor, en el 2do avance, pidió agregar subida de documentos al modal "Nueva solicitud" de la bandeja de Docencia (`RequestComponent`), que hasta ese momento no tenía ningún campo de archivo. El equipo repartió el trabajo con su compañero en un plan de 5 puntos (compartido como captura de pantalla) y a esta sesión le correspondieron los puntos 1 y 2: el Form Object (`RequestForm.php`) y el componente/vista (`RequestComponent.php` + su blade). Se pidió explícitamente: implementar el cambio 1, explicarlo y confirmarlo antes de seguir con el cambio 2; después probarlo en el navegador con las credenciales reales de cada perfil; y, antes del commit, revisar un documento adicional (la boleta oficial `SLR-002 V.3 — Solicitud de Levantamiento de Requisito`, compartida por el docente) para confirmar que el cambio no se saliera del dominio.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Antes de tocar código, ubicó los 4 archivos exactos que el plan del compañero mencionaba (`RequestForm.php`, `WaiverRequestForm.php`, `ValidationRequestForm.php`, el trait `StoresRequestAttachments`) y confirmó que el patrón de subida ya estaba resuelto y probado en el portal de estudiante — el trabajo real era **reutilizarlo** en el formulario de Docencia, no diseñarlo de nuevo.
+2. Al leer el PDF oficial SLR-002 que el docente compartió como referencia, encontró una nota explícita en el propio documento: "Esta boleta es de uso exclusivo de la dirección de carrera, área o programa" — es decir, las 5 opciones de justificación (a-e) del formulario **no** son responsabilidad del sistema ni del estudiante/Docencia, es un trámite interno de Registro Universitario que corre en paralelo. Antes de asumir que el sistema necesitaba un campo nuevo para esas 5 opciones, la IA le presentó al equipo la disyuntiva explícita (solo adjuntar el PDF vs. agregar un campo estructurado) en vez de decidir unilateralmente.
+3. Al probar el flujo con el usuario real de Docencia (`docencia@gmail.com`), encontró que el botón "Nueva solicitud"/"Agregar" **no aparece para ese rol**: el seeder (`RoleSeeder.php`) nunca le asignó el permiso `requests.create` a "Coordinadora de Docencia" — solo tiene `requests.view/search/review/export_pdf/export_excel` y los de `waiver_rules`/`validation_precedents`. Esto no es un bug introducido por el cambio; es el estado preexistente del sistema, pero cambiaba por completo con qué usuario había que probar la funcionalidad.
+4. Antes de decidir con qué perfil probar, releyó ES-01/ES-02/ES-04 del documento oficial del proyecto y confirmó que el spec nunca describe a Docencia como creador de solicitudes — el flujo documentado es siempre Estudiante → Portal → Motor → Bandeja de Docencia. Esto confirmó que la ausencia de `requests.create` en Docencia no es un gap que haya que corregir, sino que **es coherente con el spec**.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El diseño del cambio 1: 4 propiedades de archivo + reglas `required_if:type,...` + reutilización del trait `StoresRequestAttachments` en `RequestForm.php`, sin tocar `RequestDTO` (el parámetro `attachments` ya existía) ni ninguna capa de Domain/Application.
+- El diseño del cambio 2: `WithFileUploads` + `updated()`/`removeFile()` en el componente, y los dropzones (1 para Dispensa, 3 para Convalidación) copiados del mismo patrón ya usado en el portal de estudiante.
+- La lectura del PDF SLR-002: que el sistema solo necesita el archivo genérico como adjunto, sin capturar las 5 justificaciones como dato estructurado — confirmado por el propio equipo tras leer la nota "de uso exclusivo de la dirección de carrera" del documento.
+- Probar con Superadmin (no con Docencia) al confirmarse que Docencia no tiene ni debería tener `requests.create` según el spec — validado end-to-end: creación de una solicitud de Dispensa con archivo real adjunto, verificación de que el archivo quedó listado con enlace de descarga en el detalle, y verificación visual de que los 3 dropzones de Convalidación renderizan al cambiar el tipo. Los datos de prueba se eliminaron después.
+- La recomendación final de **no** agregarle `requests.create` a Docencia, sustentada en que ES-01/ES-02/ES-04 nunca la describen como creadora de solicitudes — evitando un cambio de permisos no pedido que hubiera sido difícil de justificar en la defensa oral.
+
+### 4. Qué se rechazó y por qué
+
+- Se rechazó (tras la respuesta del equipo a la pregunta directa) modelar las 5 justificaciones del SLR-002 como un campo nuevo en el formulario — el propio documento aclara que es un trámite exclusivo de Dirección de Carrera, no del sistema.
+- Se rechazó seguir intentando probar el cambio con el usuario `docencia@gmail.com` una vez confirmado que el botón no le aparece por diseño (falta de permiso, no un bug del cambio actual) — se cambió a Superadmin para no bloquear la verificación funcional.
+- Se rechazó, en la conversación posterior, agregarle `requests.create` a Docencia "para que el modal le sirva" — el equipo prefirió seguir la letra del spec (Docencia revisa, no crea) antes que hacer que un permiso encajara con un modal que en realidad es una herramienta administrativa general (Admin/Superadmin), no parte de los 4 requerimientos funcionales.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- Al probar en el navegador, el clic sobre "Nueva solicitud"/"Agregar" y sobre "Cerrar sesión" no siempre registró en el primer intento (el modal/menú tardaba en montarse); se verificó cada acción con una captura de pantalla posterior en vez de asumir que el clic había funcionado, y se repitió el clic cuando la captura mostraba que no había pasado nada — evitando reportar un falso positivo de que el modal no abría.
+- Se generó un PDF sintético mínimo (cabecera `%PDF-1.4` válida) para poder subir un archivo real de prueba, ya que las herramientas de automatización de navegador solo pueden adjuntar archivos a los que la sesión tiene permiso de lectura explícito (no el `Downloads` del usuario sin autorización previa).
+- Tras el envío, no se asumió que "la fila apareció en la tabla" era prueba suficiente: se abrió el modal de detalle y se confirmó, dentro de "Documentos adjuntos", que el archivo específico subido (`test-support-document.pdf`) quedó listado con su enlace de descarga — confirmando que `storeAttachment()` y `RequestAttachmentDownloadController` (ya existentes) siguen funcionando con el nuevo origen de datos.
+- Se eliminó explícitamente la solicitud de prueba y el archivo local sintético al terminar, para no dejar datos falsos en la base de datos de la demo.
+
+### 6. Qué se aprendió del proceso
+
+- Un documento de referencia compartido por el docente (el SLR-002) puede parecer, a primera vista, una fuente de nuevos requisitos de datos — pero una nota al pie del propio documento ("uso exclusivo de la dirección de carrera") puede indicar exactamente lo contrario: que ese contenido es contexto de dominio, no un campo a implementar. Vale la pena leer las notas/condiciones del documento completo, no solo su formulario visible, antes de traducirlo a un cambio de código.
+- Que un botón de acción no aparezca para un rol específico no siempre es un bug: cruzarlo contra el documento oficial (¿ese rol debería poder hacer esto según el spec?) evita "arreglar" un permiso que en realidad está bien como está.
+- Verificar con qué usuario tiene sentido probar una funcionalidad es una decisión que depende del spec, no solo de con qué usuario "funciona el botón" — usar Superadmin para probar aquí fue correcto porque Docencia legítimamente no debe tener este permiso, no porque Superadmin sea la opción más cómoda.
+- Confirmar visualmente cada clic con una captura antes de asumir que registró evitó reportar como probado algo que en realidad no había pasado — la misma disciplina de "verificar, no asumir" que ya aparece en entradas anteriores de este diario, aplicada ahora a la interacción con la UI en tiempo real y no solo al código o a la base de datos.
+
+---

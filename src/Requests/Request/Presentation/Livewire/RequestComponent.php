@@ -18,6 +18,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 use Src\Requests\Request\Application\UseCases\ChangeRequestStatusUseCase;
 use Src\Requests\Request\Application\UseCases\CreateRequestUseCase;
 use Src\Requests\Request\Application\UseCases\DeleteRequestUseCase;
@@ -35,6 +36,7 @@ class RequestComponent extends Component
     use AuthorizesRequests;
     use InteractsWithDataTable;
     use InteractsWithExports;
+    use WithFileUploads;
 
     /**
      * Requests grow continuously over time (unlike Role/Permission's
@@ -154,6 +156,46 @@ class RequestComponent extends Component
     public function closeCreateModal(): void
     {
         $this->showCreateModal = false;
+    }
+
+    /**
+     * @var array<int, string>
+     */
+    private const FILE_FIELDS = [
+        'form.supportDocument',
+        'form.externalProgramFile',
+        'form.gradeCertificationFile',
+        'form.institutionProofFile',
+    ];
+
+    /**
+     * Real-time validation for file inputs — same rationale as
+     * StudentRequestComponent::updated(): without this, "max 5MB"/wrong
+     * type errors only surface on full submit.
+     */
+    public function updated(string $property): void
+    {
+        if (in_array($property, self::FILE_FIELDS, true)) {
+            $this->validateOnly($property);
+        }
+    }
+
+    /**
+     * Lets Docencia discard an already-attached file and go back to the
+     * empty dropzone. $field is "form.property" as used by wire:model,
+     * e.g. "form.supportDocument".
+     */
+    public function removeFile(string $field): void
+    {
+        if (! in_array($field, self::FILE_FIELDS, true)) {
+            return;
+        }
+
+        [$form, $property] = explode('.', $field, 2);
+
+        $this->{$form}->{$property} = null;
+
+        $this->resetErrorBag($field);
     }
 
     public function save(CreateRequestUseCase $useCase, ListRequestsUseCase $listUseCase): void

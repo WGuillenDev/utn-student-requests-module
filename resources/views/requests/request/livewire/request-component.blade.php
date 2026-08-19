@@ -166,6 +166,36 @@
             </select>
             @error('form.requiredCourseId') <span class="form-error">{{ $message }}</span> @enderror
         </div>
+
+        <div class="form-field">
+            <label for="requestSupportDocument">{{ __('Supporting document') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
+            @if ($form->supportDocument && ! $errors->has('form.supportDocument'))
+                <div class="file-chip">
+                    <span class="file-chip-name">{{ $form->supportDocument->getClientOriginalName() }}</span>
+                    <button type="button" class="file-chip-remove" wire:click="removeFile('form.supportDocument')" aria-label="{{ __('Remove file') }}">&times;</button>
+                </div>
+            @else
+                <div
+                    x-data="{ dragging: false }"
+                    x-on:dragover.prevent="dragging = true"
+                    x-on:dragleave.prevent="dragging = false"
+                    x-on:drop.prevent="
+                        dragging = false;
+                        $refs.requestSupportDocument.files = $event.dataTransfer.files;
+                        $refs.requestSupportDocument.dispatchEvent(new Event('change'));
+                    "
+                    :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                >
+                    <input type="file" id="requestSupportDocument" x-ref="requestSupportDocument" wire:model="form.supportDocument" class="{{ $errors->has('form.supportDocument') ? 'has-error' : '' }}">
+                    <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                </div>
+            @endif
+            @error('form.supportDocument')
+                <span class="form-error">{{ $message }}</span>
+            @elseif ($form->supportDocument)
+                <span class="form-success">{{ __('File attached') }}</span>
+            @enderror
+        </div>
         @else
         <div class="form-field">
             <label for="requestOriginInstitution">{{ __('Origin institution') }}</label>
@@ -177,11 +207,101 @@
             <input type="text" id="requestExternalCourse" wire:model="form.externalCourse" class="{{ $errors->has('form.externalCourse') ? 'has-error' : '' }}">
             @error('form.externalCourse') <span class="form-error">{{ $message }}</span> @enderror
         </div>
+
+        <div class="form-field">
+            <label for="requestExternalProgramFile">{{ __('External course syllabus') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
+            @if ($form->externalProgramFile && ! $errors->has('form.externalProgramFile'))
+                <div class="file-chip">
+                    <span class="file-chip-name">{{ $form->externalProgramFile->getClientOriginalName() }}</span>
+                    <button type="button" class="file-chip-remove" wire:click="removeFile('form.externalProgramFile')" aria-label="{{ __('Remove file') }}">&times;</button>
+                </div>
+            @else
+                <div
+                    x-data="{ dragging: false }"
+                    x-on:dragover.prevent="dragging = true"
+                    x-on:dragleave.prevent="dragging = false"
+                    x-on:drop.prevent="
+                        dragging = false;
+                        $refs.requestExternalProgramFile.files = $event.dataTransfer.files;
+                        $refs.requestExternalProgramFile.dispatchEvent(new Event('change'));
+                    "
+                    :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                >
+                    <input type="file" id="requestExternalProgramFile" x-ref="requestExternalProgramFile" wire:model="form.externalProgramFile" class="{{ $errors->has('form.externalProgramFile') ? 'has-error' : '' }}">
+                    <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                </div>
+            @endif
+            @error('form.externalProgramFile')
+                <span class="form-error">{{ $message }}</span>
+            @elseif ($form->externalProgramFile)
+                <span class="form-success">{{ __('File attached') }}</span>
+            @enderror
+        </div>
+
+        <div class="form-field">
+            <label for="requestGradeCertificationFile">{{ __('Grade certification') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
+            @if ($form->gradeCertificationFile && ! $errors->has('form.gradeCertificationFile'))
+                <div class="file-chip">
+                    <span class="file-chip-name">{{ $form->gradeCertificationFile->getClientOriginalName() }}</span>
+                    <button type="button" class="file-chip-remove" wire:click="removeFile('form.gradeCertificationFile')" aria-label="{{ __('Remove file') }}">&times;</button>
+                </div>
+            @else
+                <div
+                    x-data="{ dragging: false }"
+                    x-on:dragover.prevent="dragging = true"
+                    x-on:dragleave.prevent="dragging = false"
+                    x-on:drop.prevent="
+                        dragging = false;
+                        $refs.requestGradeCertificationFile.files = $event.dataTransfer.files;
+                        $refs.requestGradeCertificationFile.dispatchEvent(new Event('change'));
+                    "
+                    :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                >
+                    <input type="file" id="requestGradeCertificationFile" x-ref="requestGradeCertificationFile" wire:model="form.gradeCertificationFile" class="{{ $errors->has('form.gradeCertificationFile') ? 'has-error' : '' }}">
+                    <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                </div>
+            @endif
+            @error('form.gradeCertificationFile')
+                <span class="form-error">{{ $message }}</span>
+            @elseif ($form->gradeCertificationFile)
+                <span class="form-success">{{ __('File attached') }}</span>
+            @enderror
+        </div>
+
+        <div class="form-field">
+            <label for="requestInstitutionProofFile">{{ __('Institution proof') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
+            @if ($form->institutionProofFile && ! $errors->has('form.institutionProofFile'))
+                <div class="file-chip">
+                    <span class="file-chip-name">{{ $form->institutionProofFile->getClientOriginalName() }}</span>
+                    <button type="button" class="file-chip-remove" wire:click="removeFile('form.institutionProofFile')" aria-label="{{ __('Remove file') }}">&times;</button>
+                </div>
+            @else
+                <div
+                    x-data="{ dragging: false }"
+                    x-on:dragover.prevent="dragging = true"
+                    x-on:dragleave.prevent="dragging = false"
+                    x-on:drop.prevent="
+                        dragging = false;
+                        $refs.requestInstitutionProofFile.files = $event.dataTransfer.files;
+                        $refs.requestInstitutionProofFile.dispatchEvent(new Event('change'));
+                    "
+                    :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                >
+                    <input type="file" id="requestInstitutionProofFile" x-ref="requestInstitutionProofFile" wire:model="form.institutionProofFile" class="{{ $errors->has('form.institutionProofFile') ? 'has-error' : '' }}">
+                    <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                </div>
+            @endif
+            @error('form.institutionProofFile')
+                <span class="form-error">{{ $message }}</span>
+            @elseif ($form->institutionProofFile)
+                <span class="form-success">{{ __('File attached') }}</span>
+            @enderror
+        </div>
         @endif
 
         <x-slot:footer>
             <button type="button" class="btn btn-secondary" wire:click="closeCreateModal">{{ __('Cancel') }}</button>
-            <button type="button" class="btn btn-primary" wire:click="save">{{ __('Confirm') }}</button>
+            <button type="button" class="btn btn-primary" wire:click="save" wire:loading.attr="disabled" wire:target="save,form.supportDocument,form.externalProgramFile,form.gradeCertificationFile,form.institutionProofFile">{{ __('Confirm') }}</button>
         </x-slot:footer>
     </x-ui.modal>
 
