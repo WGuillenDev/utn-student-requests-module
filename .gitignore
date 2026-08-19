@@ -22,3 +22,8 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Local environment files — do not share across the team
+.claude/
+.mcp.json
+desktop.ini
