@@ -597,3 +597,46 @@ Hasta la entrada anterior, la verificación de ES-03 se había hecho leyendo el 
 - Antes de personalizar textos o marca en una salida generada (como el correo de ES-03), vale la pena confirmar contra el documento de especificación oficial si existe un requisito real detrás, en vez de asumir que cualquier mejora percibida por el equipo es parte del alcance formal del proyecto.
 
 ---
+
+## Entrada — 20 de agosto de 2026 (continuación — columnas Estudiante/Curso mostrando IDs crudos en la bandeja de Docencia, y datos de prueba para verificarlo)
+**Tema:** Corrección de la tabla "Gestión de solicitudes" (ES-04) para mostrar nombre de estudiante y curso en vez de sus IDs numéricos, decisión de diseño sobre qué tan detallada debe verse cada fila, y creación de datos de prueba para observar el resultado con varios estudiantes distintos
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso a la terminal y a la base de datos local
+
+---
+
+### 1. Qué se le consultó a la IA
+
+El equipo compartió una captura de la bandeja de Docencia (`/solicitudes`) donde la columna "Estudiante" mostraba `1` en cada fila en vez del nombre del estudiante, y preguntó qué archivo había que modificar para corregirlo.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Ubicó la vista de la tabla (`resources/views/requests/request/livewire/request-component.blade.php`) y confirmó que la fila imprimía directamente `$request->studentId()` (línea 90) y `$request->courseId()` (línea 100) — los IDs numéricos crudos del modelo de dominio, sin resolver a nombre.
+2. Revisó `RequestComponent.php` y encontró que la resolución de ID a nombre **ya existía** en el propio componente: `studentLabelsById()` (`"Nombre Apellido (cédula)"`) y `courseLabelsById()` (`"CÓDIGO — Nombre"`), ya usados correctamente en el modal de detalle (`openViewModal()`) y en las exportaciones PDF/Excel (`exportableRows()`). El problema era que `render()` — el método que alimenta la tabla en pantalla — nunca pasaba esos dos arrays a la vista, así que el blade caía a imprimir el ID crudo sin tener otra opción.
+3. Siguiendo la costumbre de este equipo (explicar antes de escribir código, salvo autorización explícita), presentó el diagnóstico y la ubicación exacta del cambio (archivo, línea, código a escribir) sin aplicarlo, hasta que el equipo pidió explícitamente "aplícalos para refrescar y mirar los cambios".
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El diagnóstico de causa raíz (falta de paso de datos a la vista, no un bug en la lógica de resolución en sí).
+- Aplicar el cambio: pasar `studentLabels`/`courseLabels` desde `render()` y usarlos en las dos líneas del blade con fallback al ID crudo (`$studentLabels[$request->studentId()] ?? $request->studentId()`), una vez autorizado explícitamente.
+- La recomendación de diseño cuando el equipo preguntó si convenía una columna "Identificación" separada: la IA señaló el trade-off (más claro vs. una séptima columna en una tabla ya de seis) y recomendó separar, pero el equipo decidió una tercera opción — omitir la cédula del todo en esa fila y dejar solo el nombre, manteniéndola en el modal de detalle y las exportaciones.
+- Para esa tercera opción, la IA no modificó `studentLabelsById()` (compartido con modal/exportaciones), sino que agregó un método nuevo, `studentNamesById()`, exclusivo para la columna de la tabla — y verificó antes de aplicarlo que la búsqueda de la bandeja (`EloquentRequestRepository::baseQuery()`) ya filtra por nombre, apellido y cédula directamente contra la tabla `students`, independiente de qué texto se muestre en pantalla, así que omitir la cédula de la vista no rompía la búsqueda por cédula que el equipo quería conservar.
+
+### 4. Qué se rechazó y por qué
+
+- No se creó una columna "Identificación" separada — el equipo, tras escuchar el trade-off, prefirió la fila más simple (solo nombre) en vez de una columna adicional.
+- Cuando el equipo pidió crear "varios perfiles de estudiantes" para probar la tabla, la IA no creó perfiles nuevos: encontró que ya existían 10 expedientes de estudiantes sin ninguna solicitud asociada (creados manualmente por el equipo en alguna sesión anterior, no por ningún seeder del código) y los usó para crear solicitudes de prueba en vez de duplicar datos.
+- Ante la frase ambigua del equipo "cada vez que inicie sesión como estudiante y cree una solicitud, esta me recargue con un nombre", la IA no asumió que se pedía una función donde el portal del estudiante rotara de identidad en cada solicitud — señaló explícitamente que eso no sería correcto para un sistema real (una cuenta de estudiante representa siempre a la misma persona) y usó una pregunta de aclaración en vez de adivinar o de implementar algo potencialmente equivocado. El equipo confirmó que solo quería ampliar los datos de prueba a 10 estudiantes con solicitud, no esa función.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- Se verificó (`git status`) que los 20 registros de solicitudes de prueba creados en dos rondas viven únicamente en la base de datos local — no hay ningún seeder ni migración tocado — así que no aparecen como cambios pendientes de commit, a diferencia del fix de código real (`request-component.blade.php` y `RequestComponent.php`), que sí quedó listo para commit por separado.
+- Antes de insertar las solicitudes de prueba directamente vía Eloquent (sin pasar por el formulario del portal), se revisaron las migraciones de `students` y `requests` para confirmar qué columnas son realmente obligatorias a nivel de base de datos, evitando insertar datos que violaran una restricción `NOT NULL` o una clave foránea inexistente.
+
+### 6. Qué se aprendió del proceso
+
+- Antes de "crear datos nuevos" para una prueba, vale la pena revisar primero si ya existen datos utilizables sin usar — en este caso, 10 expedientes de estudiantes reales sin solicitudes, en vez de generar duplicados que solo agregarían ruido a la base de datos.
+- Una petición del equipo escrita de forma apurada o ambigua puede sonar a una función razonable a primera lectura, pero conviene parafrasearla como una pregunta de opción múltiple concreta antes de construir algo — en este caso evitó implementar una noción de "identidad rotativa" para el estudiante que no tenía sentido en el dominio del sistema.
+- Datos de prueba insertados directamente en la base de datos (vía tinker o script) y cambios de código versionado son cosas categóricamente distintas para efectos de "¿esto hay que commitear?" — vale la pena decirlo explícitamente en vez de asumir que el equipo ya distingue una cosa de la otra.
+
+---

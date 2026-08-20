@@ -87,7 +87,7 @@
 
         @forelse ($requests as $request)
         <div class="data-row" role="row">
-            <span>{{ $request->studentId() }}</span>
+            <span>{{ $studentLabels[$request->studentId()] ?? $request->studentId() }}</span>
             <span>{{ match ($request->type()) {
                     'Requirement Waiver' => __('Requirement Waiver'),
                     'Validation' => __('Course Validation'),
@@ -97,7 +97,7 @@
                 <span class="status-badge positive" title="{{ __('Approved precedent found in the historical catalog') }}">{{ __('Precedent found') }}</span>
                 @endif
             </span>
-            <span>{{ $request->courseId() }}</span>
+            <span>{{ $courseLabels[$request->courseId()] ?? $request->courseId() }}</span>
             <span>
                 @php $status = $request->status(); @endphp
                 <span class="status-badge {{ match(true) {

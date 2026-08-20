@@ -381,6 +381,8 @@ class RequestComponent extends Component
         return view('requests.request.livewire.request-component', [
             'tableMode' => 'server',
             'requests' => $paginator,
+            'studentLabels' => $this->studentNamesById(),
+            'courseLabels' => $this->courseLabelsById(),
             'studentOptions' => $this->studentOptions(),
             'courseOptions' => $this->courseOptions(),
             'careerOptions' => $this->careerOptions(),
@@ -467,6 +469,23 @@ class RequestComponent extends Component
         return StudentModel::query()
             ->get(['id', 'name', 'last_name', 'national_id'])
             ->mapWithKeys(fn (StudentModel $s) => [$s->id => "{$s->name} {$s->last_name} ({$s->national_id})"])
+            ->all();
+    }
+
+    /**
+     * Name-only variant of studentLabelsById() for the inbox table's
+     * "Student" column — the national ID stays available in the detail
+     * modal and exports (which use studentLabelsById()), but is dropped
+     * here to keep the row scannable; search still matches national_id
+     * server-side regardless (EloquentRequestRepository::baseQuery()).
+     *
+     * @return array<int, string>
+     */
+    private function studentNamesById(): array
+    {
+        return StudentModel::query()
+            ->get(['id', 'name', 'last_name'])
+            ->mapWithKeys(fn (StudentModel $s) => [$s->id => "{$s->name} {$s->last_name}"])
             ->all();
     }
 
