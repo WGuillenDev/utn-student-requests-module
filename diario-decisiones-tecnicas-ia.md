@@ -415,3 +415,47 @@ El profesor, en el 2do avance, pidió agregar subida de documentos al modal "Nue
 - Confirmar visualmente cada clic con una captura antes de asumir que registró evitó reportar como probado algo que en realidad no había pasado — la misma disciplina de "verificar, no asumir" que ya aparece en entradas anteriores de este diario, aplicada ahora a la interacción con la UI en tiempo real y no solo al código o a la base de datos.
 
 ---
+
+## Entrada — 20 de agosto de 2026
+**Tema:** Generación de archivos de prueba de subida de documentos para los 4 perfiles (de cara a la revisión informal del docente) y diagnóstico/corrección de un `Internal Server Error` real encontrado al probar la solicitud de convalidación como Estudiante
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso al navegador para reproducir el error
+
+---
+
+### 1. Qué se le consultó a la IA
+
+De cara a mostrarle el proyecto al docente al día siguiente, se le pidió a la IA crear, dentro de `C:\ARCHIVO DE PRUEBAS` (fuera del repositorio, explícitamente aclarado que no debía tocar el proyecto), una carpeta por cada uno de los 4 perfiles de prueba (Superadmin, Admin, Estudiante, Docencia) con archivos PDF/imagen/otro formato, livianos y pesados, para poder probar en vivo si el sistema acepta o rechaza cada uno al adjuntar documentos.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Antes de generar un solo archivo, revisó la regla de validación real en el código (`WaiverRequestForm.php`, `ValidationRequestForm.php`, `RequestForm.php`): `mimes:pdf,jpg,jpeg,png`, `max:5120` (5120 KB = 5 MB, límite inclusivo) — en vez de asumir formatos o tamaños de límite a partir del enunciado del usuario.
+2. Verificó, buscando en todo `src/` qué componentes usan `WithFileUploads`, que **solo** los perfiles Estudiante (`StudentRequestComponent`) y Docencia (`RequestComponent`, modal "Nueva solicitud" agregado en el avance anterior) tienen formularios con subida de archivos en este módulo — Superadmin y Admin no exponen ningún campo de archivo en Solicitudes. En vez de fabricar una prueba de algo que no existe en el código, se lo señaló explícitamente al equipo y se generaron solo 2 archivos de referencia + una nota para esos dos perfiles.
+3. Generó los archivos con cabeceras reales válidas (PDF con estructura mínima real, JPG/PNG creados con `System.Drawing` de .NET) y les agregó *padding* para alcanzar tamaños objetivo exactos, incluyendo una prueba de borde exacto sobre el límite `max:5120`: un archivo de 5120 KB exactos (debe aceptar) y uno de 5121 KB (debe rechazar por 1 KB de más) — para que, si algo falla, se sepa que falla por tamaño y no por un archivo corrupto.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El set de archivos generado por perfil (`Validos/`, `Limite_5MB/`, `Invalidos/`) y el `README.txt` con la guía de pruebas paso a paso y las credenciales de los 4 perfiles.
+- La decisión de no fabricar archivos de prueba de subida para Superadmin/Admin más allá de una referencia mínima, documentando la razón (esos roles no tienen esa funcionalidad en el módulo) en vez de simular una prueba sin sentido.
+
+### 4. Qué se rechazó y por qué — y el bug real que salió de la prueba
+
+Al probar manualmente (no la IA, el equipo) el envío de una solicitud de convalidación como Estudiante usando los archivos generados, apareció un `Internal Server Error` real: `TypeError: htmlspecialchars(): Argument #1 ($string) must be of type string, array given`, en `student-request-component.blade.php:256`. Se le pidió a la IA diagnosticarlo.
+
+La IA encontró la causa raíz revisando el código, no adivinando por el mensaje de error: la vista llamaba `__($successType)` con `$successType = 'Validation'` (uno de los dos tipos de solicitud del dominio). Como en Windows el sistema de archivos no distingue mayúsculas/minúsculas, Laravel interpreta la cadena `"Validation"` (sin punto) como el **nombre del grupo de traducción** `validation`, y como sí existe `lang/es/validation.php`, `__()` devuelve el **array completo** de mensajes de validación en vez de un texto — de ahí el `array given`. No fue un problema con los archivos subidos (los 3 documentos y la fila de la solicitud se guardaron correctamente en la base de datos, según el log de queries del propio error de Laravel); el crash ocurría solo al renderizar el modal de éxito.
+
+Antes de proponer una corrección, la IA comparó contra `request-component.blade.php` (el componente de Docencia) y encontró que **ese mismo bug ya había sido evitado ahí**, usando un `match()` explícito (`'Validation' => __('Course Validation')`) en vez de pasar el tipo crudo a `__()`. Se rechazó, por dos razones, renombrar el valor de dominio `'Validation'` en sí (usado en lógica de negocio, DTOs y la columna `requests.type`): habría sido un cambio de mayor alcance del necesario para arreglar un bug de presentación, y ya existía un patrón correcto y probado en el propio proyecto para replicar. Se aplicó ese mismo `match()` en los 3 lugares de `student-request-component.blade.php` que tenían el problema (tabla "Mis solicitudes", modal de éxito, modal de detalle).
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- Se verificó que el mismo patrón vulnerable (`__($valor_dinámico)` sobre un tipo de dominio) no existiera en ningún otro lugar de `request-component.blade.php` (Docencia): ya usaba `match()` correctamente en sus 2 puntos de visualización del tipo, por lo que no necesitó cambios.
+- El equipo repitió en su propio navegador el mismo envío de convalidación que había fallado, con los mismos archivos, y confirmó que tras la corrección el modal "Request submitted!" se muestra correctamente sin error 500.
+
+### 6. Qué se aprendió del proceso
+
+- Generar datos de prueba realistas (tamaños exactos en el límite, formatos con cabeceras válidas) no solo prueba la validación esperada — en este caso, el ejercicio de probar en vivo con esos archivos fue lo que hizo aparecer un bug real y no relacionado con el objetivo original (una colisión de nombres con `__()`), que no se habría detectado solo leyendo el código.
+- Un bug de traducción como este depende del sistema operativo: en Windows (sistema de archivos insensible a mayúsculas) `__('Validation')` colisiona con `lang/es/validation.php`; en Linux/Mac (sensible a mayúsculas) probablemente no se habría manifestado igual. Esto es relevante para el equipo porque el entorno de desarrollo es Windows pero el de despliegue/evaluación podría no serlo — un bug así puede aparecer o desaparecer según dónde se corra, por lo que no basta con "no me dio error en mi máquina".
+- Antes de corregir un bug de traducción/presentación, vale la pena revisar si el mismo patrón ya fue resuelto correctamente en otra parte del propio proyecto (aquí, el componente de Docencia) — replicar una solución ya validada en el propio código es más seguro que diseñar una nueva desde cero.
+- Pasar un valor de dominio dinámico directamente como clave a `__()` es frágil en general: cualquier valor que coincida con el nombre de un archivo de idioma reservado de Laravel (`auth`, `validation`, `passwords`, `pagination`, etc.) puede devolver un array en vez de una traducción. La forma segura, ya usada en este proyecto, es mapear explícitamente los valores de dominio conocidos a textos traducibles fijos con `match()`, nunca traducir el dato crudo directamente.
+
+---

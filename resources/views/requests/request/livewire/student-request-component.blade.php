@@ -231,7 +231,11 @@
 
         @forelse ($requests as $row)
         <div class="data-row" role="row">
-            <span>{{ __($row['type']) }}</span>
+            <span>{{ match ($row['type']) {
+                    'Requirement Waiver' => __('Requirement Waiver'),
+                    'Validation' => __('Course Validation'),
+                    default => $row['type'],
+                } }}</span>
             <span>{{ $row['course'] }}</span>
             <span>
                 <span class="status-badge {{ $row['statusVariant'] }}">{{ __($row['status']) }}</span>
@@ -253,7 +257,11 @@
     @endif
 
     <x-ui.success-modal :show="$showSuccessModal" :title="__('Request submitted!')" close-action="closeSuccessModal">
-        <p>{{ __('Type') }}: {{ __($successType) }}</p>
+        <p>{{ __('Type') }}: {{ match ($successType) {
+                'Requirement Waiver' => __('Requirement Waiver'),
+                'Validation' => __('Course Validation'),
+                default => $successType,
+            } }}</p>
         <p>{{ __('Course') }}: {{ $successCourse }}</p>
         @if ($successEngineResult)
         <p>{{ __('Immediate result') }}: <strong>{{ __($successEngineResult) }}</strong></p>
@@ -265,7 +273,11 @@
         @if ($viewingRequest)
         <div class="form-field">
             <label>{{ __('Type') }}</label>
-            <p>{{ __($viewingRequest['type']) }}</p>
+            <p>{{ match ($viewingRequest['type']) {
+                    'Requirement Waiver' => __('Requirement Waiver'),
+                    'Validation' => __('Course Validation'),
+                    default => $viewingRequest['type'],
+                } }}</p>
         </div>
         <div class="form-field">
             <label>{{ __('Course') }}</label>
