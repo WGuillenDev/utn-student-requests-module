@@ -132,7 +132,28 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         $query = RequestModel::query()->with('student');
 
         if (filled($search)) {
-            $query->where(function ($outer) use ($search): void {
+            // Docencia's inbox has no dedicated filter panel — the single
+            // search box doubles as the ES-04 filters, matching type and
+            // status against their *translated* Spanish labels (what's
+            // actually shown on screen) rather than the English enum
+            // values stored in the column, plus an exact received-date
+            // match when the term parses as YYYY-MM-DD.
+            $typeMatches = collect([
+                'Requirement Waiver' => __('Requirement Waiver'),
+                'Validation' => __('Course Validation'),
+            ])->filter(fn (string $label): bool => stripos($label, $search) !== false)->keys()->all();
+
+            $statusMatches = collect([
+                'Pending Review' => __('Pending Review'),
+                'In Review' => __('In Review'),
+                'Approved' => __('Approved'),
+                'Denied' => __('Denied'),
+            ])->filter(fn (string $label): bool => stripos($label, $search) !== false)->keys()->all();
+
+            $searchDate = \DateTime::createFromFormat('Y-m-d', $search);
+            $isExactDate = $searchDate !== false && $searchDate->format('Y-m-d') === $search;
+
+            $query->where(function ($outer) use ($search, $typeMatches, $statusMatches, $isExactDate): void {
                 $outer->whereHas('student', function ($studentQuery) use ($search): void {
                     $studentQuery->where('name', 'like', "%{$search}%")
                         ->orWhere('last_name', 'like', "%{$search}%")
@@ -141,6 +162,18 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
                     $courseQuery->where('name', 'like', "%{$search}%")
                         ->orWhere('code', 'like', "%{$search}%");
                 });
+
+                if ($typeMatches !== []) {
+                    $outer->orWhereIn('type', $typeMatches);
+                }
+
+                if ($statusMatches !== []) {
+                    $outer->orWhereIn('status', $statusMatches);
+                }
+
+                if ($isExactDate) {
+                    $outer->orWhereDate('created_at', $search);
+                }
             });
         }
 

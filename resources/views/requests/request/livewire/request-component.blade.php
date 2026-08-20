@@ -12,56 +12,12 @@
         this.confirmDelete.open = false;
     },
 }">
-    {{-- ES-04: filter bar for the Docencia inbox — type, program (career),
-         status, and received-date range. Sorting for these same columns
-         already lives in the table headers via InteractsWithDataTable. --}}
-    <div class="card" style="margin-bottom:16px;">
-        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; padding:16px;">
-            <div class="form-field" style="min-width:160px;">
-                <label for="filterType">{{ __('Type') }}</label>
-                <select id="filterType" wire:model.live="filterType">
-                    <option value="">{{ __('All types') }}</option>
-                    <option value="Requirement Waiver">{{ __('Requirement Waiver') }}</option>
-                    <option value="Validation">{{ __('Course Validation') }}</option>
-                </select>
-            </div>
-
-            <div class="form-field" style="min-width:160px;">
-                <label for="filterStatus">{{ __('Status') }}</label>
-                <select id="filterStatus" wire:model.live="filterStatus">
-                    <option value="">{{ __('All statuses') }}</option>
-                    <option value="Pending Review">{{ __('Pending Review') }}</option>
-                    <option value="In Review">{{ __('In Review') }}</option>
-                    <option value="Approved">{{ __('Approved') }}</option>
-                    <option value="Denied">{{ __('Denied') }}</option>
-                </select>
-            </div>
-
-            <div class="form-field" style="min-width:200px;">
-                <label for="filterCareerId">{{ __('Program') }}</label>
-                <select id="filterCareerId" wire:model.live="filterCareerId">
-                    <option value="">{{ __('All programs') }}</option>
-                    @foreach ($careerOptions as $option)
-                    <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
-                    @endforeach
-                </select>
-            </div>
-
-            <div class="form-field" style="min-width:150px;">
-                <label for="filterDateFrom">{{ __('Received from') }}</label>
-                <input type="date" id="filterDateFrom" wire:model.live="filterDateFrom">
-            </div>
-
-            <div class="form-field" style="min-width:150px;">
-                <label for="filterDateTo">{{ __('Received to') }}</label>
-                <input type="date" id="filterDateTo" wire:model.live="filterDateTo">
-            </div>
-
-            <button type="button" class="btn btn-secondary" wire:click="clearFilters">
-                {{ __('Clear filters') }}
-            </button>
-        </div>
-    </div>
+    {{-- ES-04's "filterable by type, program, status, and received date"
+         is satisfied through the single search box below instead of a
+         separate filter panel (Docencia's explicit UX call) — see
+         EloquentRequestRepository::baseQuery() for the matching against
+         type/status labels and the received date, on top of the
+         existing student/course text match. --}}
 
     <x-ui.data-table
         :headers="[

@@ -640,3 +640,46 @@ El equipo compartió una captura de la bandeja de Docencia (`/solicitudes`) dond
 - Datos de prueba insertados directamente en la base de datos (vía tinker o script) y cambios de código versionado son cosas categóricamente distintas para efectos de "¿esto hay que commitear?" — vale la pena decirlo explícitamente en vez de asumir que el equipo ya distingue una cosa de la otra.
 
 ---
+
+## Entrada — 20 de agosto de 2026 (continuación — reemplazo del panel de filtros de ES-04 por un buscador único, decisión de Docencia)
+**Tema:** Eliminación completa del panel de filtros (Tipo, Estado, Programa, fechas) de la bandeja de Docencia y extensión del buscador de texto para que cubra esas mismas dimensiones, por decisión estética confirmada con el docente
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal
+
+---
+
+### 1. Qué se le consultó a la IA
+
+En la misma sesión, el equipo primero mostró una captura del panel de filtros de la bandeja y comentó que se veía "feo", proponiendo eliminarlo y que el mismo cuadro de "Buscar" funcionara como filtro. Tras la recomendación de la IA (ver más abajo, punto 2), el equipo lo comentó con el docente del curso, quien decidió explícitamente por estética que el buscador debía actuar como filtro único por estudiante, tipo, curso, estado y fecha de recepción, y pidió aplicar ese cambio.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. En la primera consulta (antes de la decisión del docente), la IA no aceptó de inmediato quitar los filtros: señaló que el documento de especificación del proyecto (`Proyecto_4_Solicitudes_Estudiantiles.docx`, ES-04) exige explícitamente una bandeja "filtrable por tipo, carrera, estado y fecha de recepción", y que depender de un solo cuadro de texto libre para adivinar esas cuatro dimensiones era técnicamente frágil. Propuso una alternativa intermedia (panel colapsable detrás de un botón "Filtros") que resolvía la queja estética sin tocar la funcionalidad, y la aplicó tras autorización explícita del equipo.
+2. Cuando el equipo volvió con la decisión ya tomada por el docente (autoridad real sobre la evaluación del proyecto, no solo preferencia del equipo), la IA no volvió a insistir en el mismo argumento — procedió a implementar el cambio pedido, pero dejando explícito qué se perdía en el camino (ver punto 4).
+3. Antes de tocar el buscador, revisó cómo se muestran actualmente el tipo y el estado en pantalla: son valores en inglés en la base de datos (`'Requirement Waiver'`, `'Approved'`, etc.) traducidos a español solo en la vista vía `__()`. Para que buscar "Aprobada" funcionara, el `WHERE` de la consulta tenía que comparar contra la etiqueta traducida, no contra el valor crudo de la columna — así que construyó el mapeo de etiquetas dentro de `EloquentRequestRepository::baseQuery()` usando las mismas claves de `lang/es.json` ya existentes (para no duplicar un diccionario nuevo).
+4. Para la fecha, evitó una solución no portable (funciones SQL específicas de un motor) dado que el proyecto corre en MySQL localmente pero `.env.example` documenta SQLite como default — usó `\DateTime::createFromFormat('Y-m-d', ...)` para validar que el término de búsqueda sea una fecha exacta antes de aplicar `whereDate()`, evitando además intentar interpretar como fecha cualquier texto que no tenga ese formato.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- Eliminar por completo el panel y el botón de filtros del blade, y todo el estado de Livewire que solo existía para alimentarlo (`filterType`, `filterStatus`, `filterCareerId`, `filterDateFrom`, `filterDateTo`, `showFilters`, los métodos `updatingFilterX()`, `clearFilters()`, `activeFilters()`, `careerOptions()`, y el `use CareerModel` que quedó sin ningún otro consumidor).
+- Extender el buscador único para que haga match contra estudiante, curso, tipo (por etiqueta en español), estado (por etiqueta en español) y fecha exacta de recepción.
+- Limpiar del diccionario (`lang/es.json`) las ocho entradas que solo usaba ese panel (`All types`, `All statuses`, `Program`, `All programs`, `Received from`, `Received to`, `Filters`, `Clear filters`) — incluida `"Filters"`, que la propia IA había agregado un par de turnos antes para el botón colapsable que ahora se descartó.
+
+### 4. Qué se rechazó y por qué
+
+- La IA no eliminó el parámetro `$filters` de `RequestRepositoryInterface`, `ListRequestsUseCase` ni de `EloquentRequestRepository::baseQuery()` (las ramas que filtran por tipo/estado/carrera/fecha exacta siguen ahí, solo que ya ningún llamador les pasa nada). Lo señaló como una decisión deliberada de alcance — quitar un parámetro del contrato de Dominio es una cirugía más invasiva que "quitar un botón de la pantalla", y lo dejó como pregunta abierta para el equipo en vez de decidir unilateralmente si ese código ahora inalcanzable debía borrarse también.
+- No se agregó "programa/carrera" como dimensión de búsqueda, porque el docente solo mencionó estudiante, tipo, curso, estado y fecha — la IA no lo dio por incluido aunque el documento de especificación sí lo nombra como una de las cuatro dimensiones de filtro de ES-04, y lo dejó anotado como algo que el equipo tendría que pedir explícitamente si lo quiere cubierto también.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- Tras cada eliminación de propiedad/método, se corrió `grep` sobre todo `src/` y `resources/` buscando cada nombre eliminado (`activeFilters`, `filterType`, `filterCareerId`, etc.) para confirmar que no quedaba ninguna referencia rota — encontró coincidencias en `ValidationPrecedentComponent.php`, pero verificó que era una propiedad del mismo nombre en una clase completamente distinta y no la tocó.
+- Se validó la sintaxis de los tres archivos PHP/Blade tocados con `php -l` y la del `lang/es.json` con `json_decode`, antes de dar el cambio por terminado.
+- Al revisar el resultado visual con el equipo, la propia IA notó (sin que se le pidiera) que la columna "RECIBIDA" de la tabla en realidad muestra `estimatedResolutionDate()` en vez de `createdAt()` — un posible bug preexistente, no relacionado con este cambio. Lo señaló explícitamente en vez de corregirlo sobre la marcha, y quedó pendiente de que el equipo decida si se investiga.
+
+### 6. Qué se aprendió del proceso
+
+- Cuando una decisión de diseño la toma una autoridad externa al equipo (en este caso el docente, no solo preferencia del equipo), no tiene sentido que la IA repita el mismo argumento ya presentado antes — corresponde implementar lo pedido y ser explícito sobre qué trade-off queda aceptado, no insistir en la recomendación original una vez que ya fue escuchada y superada por una decisión con más autoridad.
+- Quitar una funcionalidad de la interfaz no es lo mismo que quitarla del sistema: fue necesario distinguir explícitamente qué capa tocar (Presentación: sí, borrar todo) de cuál no (Dominio/Aplicación: dejar intacto, con el parámetro ahora inalcanzable desde cualquier llamador real) y explicarle esa distinción al equipo en vez de decidirla en silencio.
+- Un hallazgo incidental (el bug de la columna "RECIBIDA") encontrado mientras se verifica un cambio distinto vale la pena señalarlo de inmediato con el mismo nivel de detalle que cualquier otro hallazgo, en vez de guardárselo para después o corregirlo sin que el equipo lo pida.
+
+---
