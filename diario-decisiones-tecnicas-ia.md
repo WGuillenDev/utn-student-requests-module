@@ -553,3 +553,47 @@ El equipo preguntó cómo funciona la notificación por correo de ES-03 ("notifi
 - Una autorización para editar código dada en una sesión ("hazlo tú") no debe generalizarse automáticamente a ediciones posteriores dentro de la misma conversación, aunque el patrón del problema sea idéntico — el equipo señaló este punto explícitamente, y queda como recordatorio para pedir confirmación en cada corrección de código, no asumirla por precedente inmediato.
 
 ---
+
+## Entrada — 20 de agosto de 2026 (continuación — prueba de envío real de la notificación ES-03 con SMTP de Gmail, y corrección de marca/firma en el correo)
+**Tema:** Verificación de extremo a extremo de la notificación de ES-03 usando un envío real por SMTP (no solo el log), y corrección de la marca ("Laravel") y el cierre en inglés ("Regards,") que aparecían en el correo recibido
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso a la terminal, al proceso de desarrollo local (Herd) y al documento oficial de especificación del proyecto
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Hasta la entrada anterior, la verificación de ES-03 se había hecho leyendo el contenido del correo directamente del log (`MAIL_MAILER=log`). El equipo quiso ir un paso más allá y comprobar el envío real: configurar el proyecto para mandar el correo de verdad por SMTP a una cuenta de Gmail personal del equipo y verlo recibido como lo vería un estudiante real, de forma manual y guiada paso a paso.
+
+### 2. Qué encontró e hizo la IA
+
+1. Explicó qué variables de `.env` controlan el envío (`MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`) y que Gmail exige una "contraseña de aplicación" (App Password) en vez de la contraseña normal de la cuenta.
+2. Tras el primer cambio de estado de prueba, el correo no llegó. Diagnosticando desde el log, la IA notó que el envío seguía usando el driver `log` y la dirección por defecto (`hello@example.com`), pese a que el `.env` ya tenía los valores nuevos. La causa: el proyecto levanta `php artisan serve` y `php artisan queue:listen` como procesos de larga duración vía `composer run dev`, y Laravel carga las variables de entorno en modo "immutable" — un proceso que ya arrancó con los valores viejos no relee el `.env` aunque se edite, y ese comportamiento se propaga incluso a los procesos hijo que `queue:listen` lanza por cada trabajo, porque heredan el entorno del proceso padre. Reiniciar el servicio de Herd no bastó, porque esos procesos no son parte de Herd.
+3. Un primer intento de reiniciar solo los procesos PHP dejó vivos sus procesos padre de Node.js (`npx concurrently`, `vite`) de una ejecución anterior de `composer run dev`, que siguieron corriendo en segundo plano. Hubo que localizarlos explícitamente con `Get-CimInstance Win32_Process` (para ver la línea de comando completa, no solo el nombre del proceso) y cerrarlos también antes de levantar un stack realmente limpio.
+4. Con el proceso ya limpio, el envío sí intentó conectarse a Gmail, pero el log mostró un rechazo SMTP 535 ("Username and Password not accepted"): la contraseña en `.env` seguía siendo el valor de ejemplo (`"xxxx xxxx xxxx xxxx"`) que la IA había puesto como plantilla en la guía, no la App Password real generada por el equipo. Se identificó el error leyendo el mensaje de la excepción en el log, no por ensayo y error.
+5. Una vez confirmado el envío y recibido el correo, el equipo notó que el remitente y la firma decían "Laravel" en vez del nombre del sistema, y pidió corregirlo. La IA rastreó ambos textos a una sola causa: la variable `APP_NAME` del `.env` seguía en su valor por defecto de instalación (`Laravel`), de la cual dependen tanto `MAIL_FROM_NAME` (`config/mail.php:115`) como el nombre de marca que Laravel usa en la plantilla de correo. El cierre "Regards," resultó ser un texto fijo que la plantilla de Laravel imprime con `@lang('Regards,')` cuando la notificación no define un `->salutation()` propio — no algo hardcodeado en `RequestStatusChangedNotification`.
+6. Antes de asumir que "SIGA" era el nombre correcto, se revisó el documento oficial de especificación del proyecto (`Proyecto_4_Solicitudes_Estudiantiles.docx`) para confirmar si exigía un formato o marca específica para el correo de ES-03. El documento no lo exige — ES-03 solo pide que se notifique por correo en cada cambio de estado — pero sí nombra el sistema en su encabezado como "Sistema Integrado de Gestión Académica y Docente", de donde sale el acrónimo SIGA.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- Cambiar `APP_NAME=Laravel` a `APP_NAME=SIGA` en `.env` — local únicamente, ya que `.env` está en `.gitignore` y no se sube al repositorio.
+- Agregar `"Regards,": "Saludos,"` a `lang/es.json`, siguiendo el mismo mecanismo de traducción por JSON ya usado para el resto del correo de ES-03 en la entrada anterior — este sí es un cambio de código real que se dejó listo para commit.
+- El diagnóstico completo de por qué el `.env` no se aplicaba (caché de entorno a nivel de proceso, no de configuración de Laravel) antes de intentar cualquier solución.
+
+### 4. Qué se rechazó y por qué
+
+- No se inventó ni asumió una plantilla de correo "oficial" — al confirmar que el documento de especificación no la exige, se dejó claro al equipo que SIGA/Saludos es una decisión de pulido propia del equipo, no un requisito literal del SRS, para no presentarlo como algo que no es.
+- La cuenta de Gmail personal usada para la prueba y su App Password se mantuvieron fuera de cualquier archivo del repositorio y de este mismo diario — se trataron como datos de prueba locales, no como algo que deba quedar documentado ni versionado.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- Después de confirmar que el correo llegaba bien, se revirtió manualmente el estado de prueba a como estaba antes: `MAIL_MAILER` de vuelta a `log` (y el resto de los valores `MAIL_*` a sus defaults) y el correo del usuario estudiante de prueba de vuelta a su valor original en la base de datos — para no dejar la cuenta personal ni credenciales reales de Gmail como el estado persistente del entorno local del equipo.
+- Se verificó explícitamente, antes de dar la corrección por buena, que `.env` no está trackeado por git (`git check-ignore -v .env`) y que el único archivo modificado sujeto a commit era `lang/es.json` — para asegurar que ningún dato personal terminara expuesto en el historial del repositorio.
+
+### 6. Qué se aprendió del proceso
+
+- El modo "immutable" de Dotenv en Laravel tiene una consecuencia poco intuitiva en desarrollo local: procesos de larga duración (`artisan serve`, `queue:listen`) no releen el `.env` al editarlo, y ese comportamiento se hereda incluso en los procesos hijo que lanzan — un `php artisan config:clear` no soluciona esto, hace falta matar y volver a levantar los procesos por completo.
+- Al matar procesos de desarrollo para forzar una relectura de configuración, no basta con matar el proceso hijo visible (el `php.exe` de `artisan serve`); hay que revisar también sus procesos padre (los de `node.exe`/`npx` que los lanzaron), o quedan corriendo en segundo plano compitiendo por el mismo puerto.
+- Antes de personalizar textos o marca en una salida generada (como el correo de ES-03), vale la pena confirmar contra el documento de especificación oficial si existe un requisito real detrás, en vez de asumir que cualquier mejora percibida por el equipo es parte del alcance formal del proyecto.
+
+---
