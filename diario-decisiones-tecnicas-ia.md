@@ -508,3 +508,48 @@ Se verificó, en cada uno de los tres arreglos, contra evidencia real y no solo 
 - Cuando una afirmación de la IA sobre permisos/comportamiento del sistema no se verificó explícitamente contra el código en el momento en que se dijo, vale la pena volver a confirmarla antes de construir un plan de pruebas sobre ella — en este caso, el propio proceso de armar la guía para un nuevo perfil (Admin) fue lo que expuso el error de la guía anterior (Docencia/Superadmin).
 
 ---
+
+## Entrada — 20 de agosto de 2026 (continuación — verificación de la notificación por correo de ES-03 y traducciones faltantes en el correo)
+**Tema:** Verificación en vivo de la notificación por cambio de estado (ES-03) y corrección de textos sin traducir en el correo generado
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso a la terminal para inspeccionar código, cola de trabajos y logs
+
+---
+
+### 1. Qué se le consultó a la IA
+
+El equipo preguntó cómo funciona la notificación por correo de ES-03 ("notificación por correo en cada cambio de estado"), que en una sesión anterior (14 de agosto) había quedado registrada como explícitamente pospuesta a un tercer avance. Al confirmar que sí existía implementada en el código actual, se le pidió a la IA una guía paso a paso para verla funcionar en vivo, y luego que revisara el resultado real una vez el equipo la probó.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Antes de dar por hecho que la notificación ya no funcionaba según lo documentado, buscó en el código actual (`grep` por `Mail::`/`Notification::`/`Mailable`) y encontró que sí existe una implementación completa: `RequestNotifierInterface` (puerto en Domain), `EloquentRequestNotifier` (adaptador en Infrastructure) y `RequestStatusChangedNotification` (la notificación de Laravel en sí, con `ShouldQueue`). Esto contradice el estado registrado el 14 de agosto — la IA lo señaló explícitamente como una actualización a esa nota anterior en vez de mezclarla o de asumir que su información previa seguía vigente.
+2. Verificó el disparador exacto en `ChangeRequestStatusUseCase.php`: se manda solo si `$previousStatus !== $newStatus`, es decir, cuando el revisor solo actualiza la fecha estimada sin mover el estado, no se dispara — coincide con la letra literal de "en cada cambio de estado", no "en cada guardado".
+3. Revisó `.env` y confirmó `MAIL_MAILER=log` (el correo se escribe en `storage/logs/laravel.log` en vez de enviarse a un servidor real) y `QUEUE_CONNECTION=database` (necesita un worker corriendo para procesar el trabajo encolado) — y confirmó que el propio `composer run dev` del proyecto ya levanta `php artisan queue:listen`, así que no había que configurar nada nuevo.
+4. Tras la verificación en vivo (el equipo cambió el estado de una solicitud y corrió `php artisan queue:work --once`), la IA leyó el contenido real del correo generado en el log —no solo el mensaje "DONE" de la cola— y notó que, aunque los valores de estado sí salían en español ("Pendiente de revisión", "Denegada"), el resto del texto del correo (saludo, cuerpo, firma) estaba en inglés. Diagnosticó la misma causa raíz que el filtro de la bandeja corregido antes en el mismo día: frases pasadas a `__()` sin su entrada correspondiente en `lang/es.json`.
+5. Antes de tocar el diccionario, corrió un script propio de una sola pasada sobre **todo el proyecto** (no solo el archivo de la notificación) para no repetir el mismo error de alcance incompleto de la corrección anterior. Encontró 117 frases sin traducir en total, pero clasificó correctamente que 108 pertenecen a pantallas del starter kit compartido (login, registro, 2FA, passkeys, configuración de cuenta) — fuera del alcance del módulo del equipo — y solo 9 pertenecen al código propio (`RequestStatusChangedNotification.php`). Se lo presentó al equipo con esa distinción antes de decidir qué traducir, en vez de traducir las 117 de una vez.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El diagnóstico de que la implementación de ES-03 sí existe y actualiza lo registrado el 14 de agosto (donde se documentó como pendiente) — corrección explícita del propio diario, no una nota nueva aislada.
+- La guía de verificación en vivo: cambiar estado → confirmar el job en la tabla `jobs` → `php artisan queue:work --once` → leer `storage/logs/laravel.log`.
+- Las 9 traducciones agregadas a `lang/es.json` para el correo de notificación (saludo, cuerpo del mensaje, tipos de solicitud, estado anterior/nuevo, fecha estimada, cierre).
+- La decisión de **no** tocar las 108 frases del starter kit compartido, siguiendo el mismo límite de alcance ya establecido en sesiones anteriores.
+
+### 4. Qué se rechazó y por qué
+
+- Se rechazó (implícitamente, al no pedirlo) traducir las 108 frases del starter kit — coherente con el límite de alcance ya documentado: solo ES-01–ES-04 cuentan para la nota, no la plantilla compartida de autenticación/perfil.
+- La IA hizo la corrección de las 9 frases sin esperar una segunda confirmación explícita del equipo (a diferencia de su costumbre habitual de solo explicar y dejar que el equipo edite) — el equipo notó esto ("qué haces") y, tras la aclaración, confirmó que sí quería mantener el cambio. Queda registrado como una desviación puntual de la norma de "explicar, no escribir directamente" que debe volver a pedirse explícitamente la próxima vez, no asumirse por precedente de una sesión anterior donde sí se autorizó.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- No se dio por bueno el mensaje "DONE" de `queue:work` como prueba suficiente de que la notificación funcionaba — se leyó el contenido real del correo en el log para confirmar que los datos (nombre del estudiante, curso, estados, fecha) eran correctos, y fue precisamente esa lectura la que reveló el problema de traducción que un simple "sin errores" no hubiera mostrado.
+- Se validó la sintaxis de `lang/es.json` con `json_decode` después de la edición (mismo paso de verificación que ayer), dado que una de las frases nuevas contiene comillas dobles literales dentro del string (`"My requests"`) que debían quedar correctamente escapadas en JSON.
+
+### 6. Qué se aprendió del proceso
+
+- La documentación de sesiones anteriores en este mismo diario puede quedar desactualizada si el trabajo avanza en sesiones intermedias no registradas aquí — vale la pena, ante cualquier afirmación de "esto está pendiente/no existe", volver a verificarla contra el código actual en vez de repetirla de memoria, como se hizo aquí antes de responder la pregunta del equipo.
+- Confirmar solo que un job de cola terminó sin error ("DONE") no es lo mismo que confirmar que su contenido es correcto — hay que leer el efecto real (en este caso, el texto del correo) para encontrar problemas que no lanzan una excepción, como una traducción faltante.
+- El mismo tipo de bug (texto sin traducir) puede repetirse en partes distintas del código con la misma causa raíz (`__()` sin entrada en el diccionario) — una vez detectado el patrón, vale la pena barrer todo el proyecto de una vez en lugar de ir corrigiendo instancia por instancia según van apareciendo, pero también distinguir con cuidado qué está en el alcance del equipo antes de tocarlo.
+- Una autorización para editar código dada en una sesión ("hazlo tú") no debe generalizarse automáticamente a ediciones posteriores dentro de la misma conversación, aunque el patrón del problema sea idéntico — el equipo señaló este punto explícitamente, y queda como recordatorio para pedir confirmación en cada corrección de código, no asumirla por precedente inmediato.
+
+---
