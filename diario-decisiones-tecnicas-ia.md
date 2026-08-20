@@ -459,3 +459,52 @@ Antes de proponer una corrección, la IA comparó contra `request-component.blad
 - Pasar un valor de dominio dinámico directamente como clave a `__()` es frágil en general: cualquier valor que coincida con el nombre de un archivo de idioma reservado de Laravel (`auth`, `validation`, `passwords`, `pagination`, etc.) puede devolver un array en vez de una traducción. La forma segura, ya usada en este proyecto, es mapear explícitamente los valores de dominio conocidos a textos traducibles fijos con `match()`, nunca traducir el dato crudo directamente.
 
 ---
+
+## Entrada — 20 de agosto de 2026 (continuación — pruebas guiadas por perfil, exportación PDF/Excel y traducciones faltantes)
+**Tema:** Sesión de pruebas manuales guiadas por pantalla y por perfil (Docencia y Admin), diagnóstico de un error 500 al exportar PDF/Excel, y corrección de etiquetas del filtro de la bandeja que aparecían en inglés
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso al navegador para verificar en vivo
+
+---
+
+### 1. Qué se le consultó a la IA
+
+De cara al avance de mañana, el equipo pidió que la IA guiara, pantalla por pantalla, qué probar manualmente en cada perfil (Docencia primero, luego Admin) y el objetivo de dominio de cada prueba — no que la IA hiciera las pruebas, sino que las explicara para entender mejor el dominio antes de ejecutarlas a mano. Durante ese recorrido surgieron tres problemas reales que sí se le pidió corregir: (1) un error 500 al exportar PDF/Excel desde la bandeja de Docencia, (2) confirmar si "aprobar" un precedente de convalidación debía reflejarse como resultado inmediato en la solicitud del estudiante, y (3) el filtro de la bandeja (Docencia/Admin) con las etiquetas "Program", "Received from" y "Received to" en inglés en medio de una interfaz en español.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. **Exportación PDF/Excel:** revisando el stack trace del error, encontró que `spatie/laravel-pdf` y `spatie/simple-excel` estaban declarados en `composer.json`/`composer.lock` pero **nunca se habían instalado** (`vendor/spatie/` no existía). Al intentar `composer install`, encontró un segundo problema no relacionado con el proyecto: un bug conocido de Composer al leer `curl_version()` en Windows cuando el backend SSL es Schannel sin número de versión (el caso exacto del PHP de Herd usado en este equipo) — resuelto usando una segunda instalación de PHP presente en la máquina (`C:\php\php.exe`, con curl/OpenSSL en formato normal) solo para ese paso puntual de instalación. Tras instalar, un tercer problema: Browsershot (usado por `spatie/laravel-pdf` para generar el PDF) requiere un Chrome headless descargado aparte vía `npx puppeteer browsers install chrome-headless-shell`, que tampoco se había hecho nunca.
+2. **Resultado de convalidación en "Mis solicitudes":** en vez de asumir que era un bug, revisó `CreateRequestUseCase::handle()` y confirmó que el motor automático (`WaiverEngine`) **solo corre para "Dispensa de requisito"** — para "Convalidación" el `engineResult` siempre queda `null` a propósito; el precedente aprobado solo se vincula silenciosamente (`resolveValidationPrecedentId()`) y se le muestra a Docencia al revisar, nunca al estudiante como resultado inmediato. Confirmó que el comportamiento observado era el diseño esperado, no un defecto.
+3. **Etiquetas en inglés:** en vez de traducir solo las 3 etiquetas señaladas por el equipo, comparó **todas** las claves `__('...')` usadas en las vistas del módulo de Solicitudes contra el diccionario `lang/es.json` (con un script PHP de una sola pasada) y encontró **2 claves adicionales** sin traducir que no eran visibles a simple vista en la captura compartida ("All programs", "Clear filters") — evitando dejar el arreglo incompleto.
+4. **Error propio detectado y corregido en la misma sesión:** al explicar qué probar como Admin, la IA había dicho antes (en un turno previo) que "Superadmin y Admin no tienen subida de archivos en este módulo" — una generalización incorrecta. Al revisar `DatabaseSeeder.php:38-39`, encontró que el rol `Admin` recibe **el 100% de los permisos** (incluido `requests.create`), el mismo permiso que le falta a Docencia y que es justamente el que oculta el botón "Nueva solicitud" (con sus 4 campos de archivo) en esa bandeja. La IA señaló su propio error explícitamente al equipo en vez de dejarlo pasar, y corrigió el plan de pruebas de Admin en consecuencia.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- Instalar las dependencias de Composer usando temporalmente `C:\php\php.exe` (con `--ignore-platform-req=ext-fileinfo` y habilitando puntualmente `extension=zip` en ese `php.ini` aparte, revertido después) — verificado primero que el PHP real de la aplicación (Herd) ya tenía `curl`, `fileinfo` y `zip` cargados, así que no había riesgo de que el runtime real quedara con dependencias a medias.
+- La instalación del navegador headless de Puppeteer (`chrome-headless-shell`) como paso necesario, no opcional, para que Browsershot funcione.
+- Las 5 traducciones agregadas a `lang/es.json` ("Program" → "Programa", "All programs" → "Todos los programas", "Received from" → "Recibida desde", "Received to" → "Recibida hasta", "Clear filters" → "Limpiar filtros"), verificadas en el navegador sin necesidad de reiniciar el servidor.
+- La corrección del plan de pruebas de Admin para incluir la subida de archivos en `/solicitudes`, una vez confirmado el permiso real.
+
+### 4. Qué se rechazó y por qué
+
+- Se rechazó dejar habilitada permanentemente la extensión `zip` en `C:\php\php.ini`: esa instalación de PHP no es la que corre la aplicación, solo se usó como herramienta puntual para esquivar el bug de Composer, así que se revirtió al estado original apenas terminó la instalación.
+- Se rechazó tocar cualquier archivo `.blade.php` para arreglar las traducciones — el problema estaba en el diccionario (`lang/es.json`), no en las vistas, así que modificar las vistas habría sido un cambio innecesario y hubiera dejado el `.blade.php` inconsistente con el resto de claves ya traducidas por diccionario.
+
+### 5. Qué hubo que corregir o verificar manualmente — el error real de la IA
+
+El error real de esta sesión ya está descrito en el punto 2.4: la IA afirmó incorrectamente, sin verificarlo contra el código, que Admin no tenía subida de archivos en el módulo — una generalización apresurada a partir de que Docencia sí carecía de ese permiso. Se corrigió solo porque el equipo pidió explícitamente el plan de pruebas de Admin, lo que obligó a revisar el permiso real antes de dar la guía; si el equipo no hubiera pedido probar ese perfil, el error habría quedado sin detectar en la documentación de la sesión anterior.
+
+Se verificó, en cada uno de los tres arreglos, contra evidencia real y no solo contra el mensaje de éxito de la terminal:
+- La exportación PDF y Excel se probó en vivo en el navegador (no solo "composer install terminó bien") — se confirmó `200 OK` en la petición de red para ambos formatos antes de darlo por resuelto, después de que el primer intento de PDF diera `500` por el Chrome headless faltante.
+- El resultado de convalidación se verificó leyendo el código de `CreateRequestUseCase`, no solo probando en pantalla, para poder explicar la razón exacta (no solo "así funciona").
+- Las traducciones se verificaron extrayendo el texto real de la página (`get_page_text`) tras recargar, no solo revisando que el JSON quedara bien formado.
+
+### 6. Qué se aprendió del proceso
+
+- Un `composer.json`/`composer.lock` con una dependencia declarada no garantiza que esté instalada — vale la pena, ante una clase "not found", verificar primero si `vendor/<paquete>` existe físicamente antes de sospechar de un bug de código.
+- Un entorno Windows con múltiples instalaciones de PHP (Herd para correr la app, otra instalación aparte) puede ser una salida práctica cuando una de ellas tiene un bug de compatibilidad con una herramienta (Composer) — siempre que se verifique antes que el PHP que sí importa (el que corre `php artisan serve`) tenga todo lo necesario, para no arrastrar el problema al runtime real.
+- Una librería de generación de PDF basada en un navegador headless (Browsershot/Puppeteer) tiene una dependencia binaria (el propio Chrome) que Composer no instala — es un paso de instalación aparte, fácil de olvidar, que conviene documentar en el README del proyecto para que no se repita este mismo diagnóstico en otra máquina.
+- Diferenciar "esto no hace lo que esperaba" de "esto es un bug" requiere leer el caso de uso real (`CreateRequestUseCase`) en vez de asumir por el nombre de la funcionalidad ("motor de reglas") que debería comportarse igual para los dos tipos de solicitud — ES-01 y ES-02 tienen mecanismos distintos aunque compartan la misma tabla `requests`.
+- Cuando una afirmación de la IA sobre permisos/comportamiento del sistema no se verificó explícitamente contra el código en el momento en que se dijo, vale la pena volver a confirmarla antes de construir un plan de pruebas sobre ella — en este caso, el propio proceso de armar la guía para un nuevo perfil (Admin) fue lo que expuso el error de la guía anterior (Docencia/Superadmin).
+
+---
