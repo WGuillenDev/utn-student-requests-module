@@ -751,3 +751,49 @@ En la misma sesión, el equipo primero mostró una captura del panel de filtros 
 - Datos de catálogo cargados directamente en la base de datos (carreras, cursos, matrículas, usuarios de demo) no dejan ningún rastro en `git status` — vale la pena decirlo explícitamente al equipo al cierre de una sesión así, para que quede claro que ese trabajo no se pierde solo si en algún momento se decide formalizarlo en un seeder.
 
 ---
+
+## Entrada — 22 de agosto de 2026
+**Tema:** Nueva acción "Ver detalle y documentos" en la bandeja de Docencia, con el expediente académico del estudiante sumado al modal de detalle
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso al código del proyecto (sin entorno local levantado en esta sesión — ver sección 5)
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Se pidió agregar, en las acciones de la bandeja de solicitudes de Docencia, una nueva acción llamada "Ver detalle y documentos" que, además de mostrar el detalle de la solicitud y sus documentos adjuntos, también mostrara el expediente del estudiante.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. La bandeja de Docencia (`RequestComponent`/`request-component.blade.php`) ya tenía una acción "Ver" con un modal de solo lectura (`openViewModal`) que mostraba el detalle de la solicitud **y** los documentos adjuntos — es decir, dos de los tres requisitos ya existían, solo faltaba el nombre solicitado y el expediente.
+2. El botón "Ver" se renderiza con `<x-ui.row-actions>`, un componente compartido por Roles, Permisos, Precedentes de Convalidación, Reglas de Levantamiento y el propio portal del estudiante — su título ("Ver") estaba fijo dentro del componente, así que cambiarlo directamente ahí habría renombrado el botón en las otras cinco pantallas sin que nadie lo pidiera.
+3. El concepto de "expediente del estudiante" ya existía en el dominio, pero nunca se había mostrado en ninguna pantalla: `StudentAcademicProfileRepositoryInterface` (con el comentario propio "expediente simulado") lee la tabla `academic_records` (curso, estado, nota, período académico) exclusivamente para que el `WaiverEngine` responda preguntas sí/no de forma automática — ningún humano lo veía nunca directamente.
+4. `StudentModel` ya tenía las relaciones `studyPlans()` (con el nivel actual vía pivote) y `academicRecords()` sin usar fuera del motor de reglas, así que no hacía falta construir infraestructura nueva para leer el expediente, solo cargarlas con `with()` y mapearlas a un arreglo para la vista, siguiendo el mismo patrón ya usado en `openViewModal()` para estudiantes/cursos/documentos.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- Extender la acción y el modal "Ver" ya existentes en vez de crear una acción y un modal paralelos, ya que ambos requisitos (detalle + documentos) ya estaban resueltos ahí y compartían la misma autorización (`RequestPolicy::view()`, ya concedida a Docencia).
+- Agregar un prop opcional `viewLabel` al componente compartido `<x-ui.row-actions>` (con `__('View')` como valor por defecto) para poder renombrar el botón únicamente en la bandeja de Docencia sin tocar Roles, Permisos, Precedentes, Reglas de Levantamiento ni el portal del estudiante.
+- La nueva sección "Expediente del estudiante" dentro del modal existente: plan(es) de estudio con nivel actual, y el historial completo de `academic_records` (curso, estado con badge de color, nota, período), reutilizando `StudentModel::with(['studyPlans', 'academicRecords.course', 'academicRecords.academicPeriod'])` en vez de una consulta nueva por fuera del modelo ya existente.
+- Las traducciones nuevas para los estados de `academic_records` que nunca se habían mostrado en una pantalla (`Failed` → "Reprobado", `Credited by Equivalence` → "Acreditado por equivalencia", `Credited by Validation` → "Acreditado por convalidación", `Requirement Waived` → "Requisito levantado").
+
+### 4. Qué se rechazó y por qué
+
+- No se reutilizó literalmente el estado `Approved` de una solicitud (`"Aprobada"`, femenino, concuerda con "solicitud") como si fuera nuevo para el estado de un curso aprobado en el expediente (que en buen español concordaría como "Aprobado", masculino, con "curso"). Se aceptó conscientemente esa pequeña imprecisión de género en vez de introducir una clave de traducción duplicada con el mismo texto en inglés (`"Approved"`) pero distinto valor en español, algo que Laravel no soporta con `lang/es.json` (una clave = un valor). Quedó señalado como un detalle cosmético menor, no como un error corregido a medias.
+- No se tocó el permiso `requests.view` ni la policy: Docencia ya podía ver cualquier solicitud, así que no había nada que autorizar de nuevo para esta acción.
+- No se creó una pantalla o ruta separada de "expediente del estudiante": el pedido fue mostrarlo junto al detalle y los documentos de la solicitud, no como una sección independiente del sistema.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- El entorno de esta sesión no tenía `vendor/` ni `.env` configurados, así que la IA no pudo levantar la aplicación ni verificar el cambio abriendo el navegador con la cuenta de Docencia (`docencia@gmail.com`) — a diferencia de sesiones anteriores donde sí se verificó cada cambio en vivo. Se lo señaló explícitamente al equipo en la misma respuesta en vez de dar el cambio por probado, y quedó pendiente que el equipo lo confirme visualmente tras `composer install` + configurar `.env`.
+- Ante la falta de un entorno ejecutable, se corrieron las validaciones estáticas disponibles: `php -l` sobre `RequestComponent.php`, y `json_decode()` sobre `lang/es.json` para confirmar que las claves nuevas no rompieran el archivo (no había ninguna clave duplicada con las ~230 ya existentes).
+- Se revisó a mano el balance de directivas Blade (`@if`/`@else`/`@endif`/`@foreach`/`@endforeach`) en el bloque nuevo del modal, ya que no hay un linter de Blade disponible en este entorno para detectarlo automáticamente.
+
+### 6. Qué se aprendió del proceso
+
+- Antes de agregar una acción o pantalla nueva, vale la pena revisar si ya existe algo parecido a medio camino (aquí, el modal "Ver" ya cubría dos de los tres requisitos pedidos) — extenderlo evita duplicar autorización, consultas y markup que ya estaban resueltos y probados.
+- Un componente de UI compartido por varias pantallas (`<x-ui.row-actions>`) no debe modificarse con un valor fijo nuevo solo porque una pantalla lo necesita — conviene volverlo configurable con un valor por defecto que preserve el comportamiento de todos los demás llamadores.
+- Un concepto de dominio que ya existe pero solo se usa internamente (el "expediente simulado" que el motor de reglas consulta) puede tener ya toda la infraestructura de datos necesaria (modelos, relaciones) para exponerse en una pantalla — antes de diseñar algo nuevo vale la pena revisar si el dato que se pide ya se está leyendo en algún otro punto del sistema, aunque sea con otro propósito.
+- Sin un entorno ejecutable, la verificación de un cambio de UI queda necesariamente incompleta (sintaxis sí, comportamiento real no) — es preferible decirlo con claridad en vez de dar a entender que el cambio fue probado igual que en sesiones con navegador disponible.
+
+---
