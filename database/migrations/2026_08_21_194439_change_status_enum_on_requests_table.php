@@ -16,11 +16,15 @@ return new class extends Migration
     {
         DB::table('requests')->where('status', 'In Review')->update(['status' => 'Pending Review']);
 
-        DB::statement("ALTER TABLE requests MODIFY status ENUM('Pending Review', 'Approved', 'Denied') NOT NULL DEFAULT 'Pending Review'");
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE requests MODIFY status ENUM('Pending Review', 'Approved', 'Denied') NOT NULL DEFAULT 'Pending Review'");
+        }
     }
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE requests MODIFY status ENUM('Pending Review', 'In Review', 'Approved', 'Denied') NOT NULL DEFAULT 'Pending Review'");
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE requests MODIFY status ENUM('Pending Review', 'In Review', 'Approved', 'Denied') NOT NULL DEFAULT 'Pending Review'");
+        }
     }
 };
