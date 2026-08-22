@@ -8,6 +8,7 @@ use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
 use App\Infrastructure\Persistence\Eloquent\Documents\Models\FileModel;
 use App\Infrastructure\Persistence\Eloquent\Requests\Models\RequestModel;
 use App\Infrastructure\Persistence\Eloquent\Requests\Models\ValidationPrecedentModel;
+use App\Infrastructure\Persistence\Eloquent\Students\Models\AcademicRecordModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
 use App\Livewire\Concerns\InteractsWithDataTable;
 use App\Livewire\Concerns\InteractsWithExports;
@@ -198,9 +199,45 @@ class RequestComponent extends Component
                     'sizeKb' => (int) round($file->size_bytes / 1024),
                 ])
                 ->all(),
+            'studentRecord' => $this->studentRecord($request->studentId()),
         ];
 
         $this->showViewModal = true;
+    }
+
+    /**
+     * Docencia's "expediente del estudiante": the study plan(s) the
+     * student is enrolled in (with their current level) plus the full
+     * academic record history — the same academic_records rows the
+     * WaiverEngine reads via StudentAcademicProfileRepositoryInterface,
+     * surfaced here read-only so a reviewer can see the record behind
+     * an engine result without leaving the request detail modal.
+     *
+     * @return array{studyPlans: array<int, array{name: string, currentLevel: int}>, courses: array<int, array{course: string, status: string, grade: string|null, period: string}>}
+     */
+    private function studentRecord(int $studentId): array
+    {
+        $student = StudentModel::query()
+            ->whereKey($studentId)
+            ->with(['studyPlans', 'academicRecords.course', 'academicRecords.academicPeriod'])
+            ->first();
+
+        return [
+            'studyPlans' => $student?->studyPlans
+                ->map(fn ($plan) => [
+                    'name' => $plan->name,
+                    'currentLevel' => $plan->pivot->current_level,
+                ])
+                ->all() ?? [],
+            'courses' => $student?->academicRecords
+                ->map(fn (AcademicRecordModel $record) => [
+                    'course' => $record->course !== null ? "{$record->course->code} — {$record->course->name}" : (string) $record->course_id,
+                    'status' => $record->status,
+                    'grade' => $record->grade !== null ? (string) $record->grade : null,
+                    'period' => $record->academicPeriod !== null ? "{$record->academicPeriod->term} {$record->academicPeriod->year}" : '—',
+                ])
+                ->all() ?? [],
+        ];
     }
 
     public function closeViewModal(): void

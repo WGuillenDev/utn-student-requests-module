@@ -3,6 +3,7 @@
 'canEdit' => false,
 'canDelete' => false,
 'viewAction' => null,
+'viewLabel' => null,
 'editAction' => null,
 'deleteId' => null,
 'deleteVisible' => 'true',
@@ -30,7 +31,7 @@
     confirm → delete → success flow from there.
 --}}
 @if ($canView && $viewAction)
-<button type="button" class="action-icon view" @click="{{ $viewAction }}" title="{{ __('View') }}" aria-label="{{ __('View') }}">
+<button type="button" class="action-icon view" @click="{{ $viewAction }}" title="{{ $viewLabel ?? __('View') }}" aria-label="{{ $viewLabel ?? __('View') }}">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
         <circle cx="12" cy="12" r="3"></circle>

@@ -70,6 +70,7 @@
                     :can-edit="Auth::user()->can('review', $request) && ! $request->isFinal()"
                     :can-delete="Auth::user()->can('delete', $request)"
                     view-action="$wire.openViewModal({{ $request->id() }})"
+                    view-label="{{ __('View details and documents') }}"
                     edit-action="$wire.openReviewModal({{ $request->id() }})"
                     delete-id="{{ $request->id() }}" />
             </div>
@@ -341,6 +342,38 @@
                    style="text-decoration:none;">
                     <span class="file-chip-name">{{ $document['originalName'] }} ({{ $document['sizeKb'] }} KB)</span>
                 </a>
+                @endforeach
+            </div>
+            @endif
+        </div>
+        <div class="form-field">
+            <label>{{ __('Student academic record') }}</label>
+            @if (count($viewingRequest['studentRecord']['studyPlans']) > 0)
+            <div style="display:flex; flex-direction:column; gap:4px;">
+                @foreach ($viewingRequest['studentRecord']['studyPlans'] as $plan)
+                <span style="font-size:13px; opacity:.8;">{{ $plan['name'] }} — {{ __('Current level') }}: {{ $plan['currentLevel'] }}</span>
+                @endforeach
+            </div>
+            @endif
+            @if (count($viewingRequest['studentRecord']['courses']) === 0)
+            <p style="opacity:.6;">{{ __('No academic record found') }}</p>
+            @else
+            <div style="display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto;">
+                @foreach ($viewingRequest['studentRecord']['courses'] as $course)
+                <div class="file-chip">
+                    <span class="file-chip-name">{{ $course['course'] }}</span>
+                    <span style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+                        <span class="status-badge {{ match(true) {
+                                in_array($course['status'], ['Approved', 'Credited by Equivalence', 'Credited by Validation', 'Requirement Waived'], true) => 'positive',
+                                $course['status'] === 'Failed' => 'negative',
+                                default => '',
+                            } }}">{{ __($course['status']) }}</span>
+                        @if ($course['grade'] !== null)
+                        <span style="font-size:12.5px; opacity:.7;">{{ $course['grade'] }}</span>
+                        @endif
+                        <span style="font-size:12.5px; opacity:.6;">{{ $course['period'] }}</span>
+                    </span>
+                </div>
                 @endforeach
             </div>
             @endif
