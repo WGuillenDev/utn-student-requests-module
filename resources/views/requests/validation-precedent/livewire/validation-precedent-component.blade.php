@@ -17,7 +17,7 @@
                 ['key' => 'institution', 'label' => __('Institution'), 'sortable' => true],
                 ['key' => 'external_course', 'label' => __('External course'), 'sortable' => true],
                 ['key' => 'course', 'label' => __('Course'), 'sortable' => false],
-                ['key' => 'result', 'label' => __('Result'), 'sortable' => true],
+                ['key' => 'result', 'label' => __('Status'), 'sortable' => true],
                 ['key' => 'resolution_number', 'label' => __('Resolution number'), 'sortable' => false],
             ]"
         :mode="$tableMode"
@@ -78,7 +78,7 @@
         <div class="form-field">
             <label for="precedentCareer">{{ __('Career') }}</label>
             <select id="precedentCareer" wire:model.live="filterCareerId">
-                <option value="">{{ __('All careers') }}</option>
+                <option value="">{{ __('Select a career') }}</option>
                 @foreach ($careerOptions as $option)
                 <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
                 @endforeach
@@ -94,10 +94,13 @@
                 @endforeach
             </select>
             @error('form.courseId') <span class="form-error">{{ $message }}</span> @enderror
+            @if ($filterCareerId === null)
+            <span class="form-error">{{ __('You must select a career before choosing a course.') }}</span>
+            @endif
         </div>
 
         <div class="form-field">
-            <label for="precedentResult">{{ __('Result') }}</label>
+            <label for="precedentResult">{{ __('Status') }}</label>
             <select id="precedentResult" wire:model="form.result">
                 <option value="Approved">{{ __('Approved') }}</option>
                 <option value="Denied">{{ __('Denied') }}</option>
@@ -134,7 +137,7 @@
         </div>
 
         <div class="form-field">
-            <label>{{ __('Result') }}</label>
+            <label>{{ __('Status') }}</label>
             <p>
                 @if ($viewing['result'] === 'Approved')
                 <span class="status-badge positive">{{ __('Approved') }}</span>
@@ -149,13 +152,6 @@
             <p>{{ $viewing['resolutionNumber'] }}</p>
         </div>
         @endif
-
-        <x-slot:footer>
-            <button type="button" class="btn btn-secondary" wire:click="closeViewModal">{{ __('Close') }}</button>
-            @if ($viewing && Auth::user()->hasPermissionTo('validation_precedents.edit'))
-            <button type="button" class="btn btn-primary" wire:click="openEditModal({{ $viewing['id'] }})">{{ __('Edit') }}</button>
-            @endif
-        </x-slot:footer>
     </x-ui.modal>
 
     <x-ui.confirm-delete-modal :success-text="__('The precedent has been deleted.')" />

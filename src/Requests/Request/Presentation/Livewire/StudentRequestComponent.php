@@ -11,6 +11,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Src\Requests\Request\Application\UseCases\CreateRequestUseCase;
@@ -79,9 +80,6 @@ class StudentRequestComponent extends Component
      */
     private const FILE_FIELDS = [
         'waiverForm.supportDocument',
-        'validationForm.externalProgramFile',
-        'validationForm.gradeCertificationFile',
-        'validationForm.institutionProofFile',
     ];
 
     /**
@@ -135,16 +133,47 @@ class StudentRequestComponent extends Component
         $this->openSuccessModal('Requirement Waiver', $course, $request->engineResult());
     }
 
+    public function addValidationCourse(): void
+    {
+        if (count($this->validationForm->courses) >= ValidationRequestForm::MAX_COURSES) {
+            return;
+        }
+
+        $this->validationForm->courses[] = ['courseId' => null, 'externalCourse' => null, 'originInstitution' => null];
+    }
+
+    public function removeValidationCourse(int $index): void
+    {
+        if (count($this->validationForm->courses) <= 1) {
+            return;
+        }
+
+        unset($this->validationForm->courses[$index]);
+        $this->validationForm->courses = array_values($this->validationForm->courses);
+    }
+
+    public function removeValidationDocument(int $index): void
+    {
+        $documents = $this->validationForm->documents;
+        unset($documents[$index]);
+        $this->validationForm->documents = array_values($documents);
+    }
+
     public function submitValidation(CreateRequestUseCase $useCase): void
     {
         $this->validationForm->validate();
 
-        $course = $this->courseLabel($this->validationForm->courseId);
+        $courseLabels = $this->courseLabelsById();
+        $courseNames = collect($this->validationForm->courses)
+            ->map(fn (array $course) => $courseLabels[(int) $course['courseId']] ?? (string) $course['courseId'])
+            ->implode(', ');
 
-        $useCase->handle($this->validationForm->toDto($this->studentId()));
+        foreach ($this->validationForm->toDtos($this->studentId()) as $dto) {
+            $useCase->handle($dto);
+        }
 
         $this->validationForm->reset();
-        $this->openSuccessModal('Validation', $course);
+        $this->openSuccessModal('Validation', $courseNames);
     }
 
     public function closeSuccessModal(): void
@@ -222,17 +251,44 @@ class StudentRequestComponent extends Component
     }
 
     /**
+     * Scoped to the courses of the career(s) the student is enrolled in
+     * (via student_study_plan → study_plans.career_id), plus any
+     * cross-cutting course with no career_id (is_service = true) — so a
+     * Salud Ocupacional student never sees Ingeniería del Software
+     * courses in this dropdown, and vice versa. Falls back to the full
+     * catalog if the student has no enrollment on file, so the form
+     * never renders an empty dropdown.
+     *
      * @return array<int, array{id: int, label: string}>
      */
     private function courseOptions(): array
     {
+        $careerIds = $this->studentCareerIds();
+
         return CourseModel::query()
+            ->when($careerIds !== [], function ($query) use ($careerIds): void {
+                $query->where(function ($q) use ($careerIds): void {
+                    $q->whereIn('career_id', $careerIds)->orWhereNull('career_id');
+                });
+            })
             ->orderBy('name')
             ->get(['id', 'name', 'code'])
             ->map(fn (CourseModel $c) => [
                 'id' => $c->id,
                 'label' => "{$c->code} — {$c->name}",
             ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function studentCareerIds(): array
+    {
+        return DB::table('student_study_plan')
+            ->join('study_plans', 'study_plans.id', '=', 'student_study_plan.study_plan_id')
+            ->where('student_study_plan.student_id', $this->studentId())
+            ->pluck('study_plans.career_id')
             ->all();
     }
 
@@ -253,7 +309,7 @@ class StudentRequestComponent extends Component
     }
 
     /**
-     * @param array<int, string> $courseLabels
+     * @param  array<int, string>  $courseLabels
      * @return array<string, mixed>
      */
     private function toRow(Request $request, array $courseLabels): array
@@ -265,6 +321,7 @@ class StudentRequestComponent extends Component
             'requiredCourse' => $request->requiredCourseId()
                 ? ($courseLabels[$request->requiredCourseId()] ?? (string) $request->requiredCourseId())
                 : null,
+            'waiverJustification' => $request->waiverJustification(),
             'status' => $request->status(),
             'statusVariant' => $this->statusVariant($request->status()),
             'result' => $request->engineResult(),
@@ -279,7 +336,7 @@ class StudentRequestComponent extends Component
         return match (true) {
             $status === 'Approved' => 'positive',
             $status === 'Denied' => 'negative',
-            $status === 'Pending Review', $status === 'In Review' => 'pending',
+            $status === 'Pending Review' => 'pending',
             default => '',
         };
     }

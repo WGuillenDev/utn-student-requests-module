@@ -203,7 +203,7 @@ class ValidationPrecedentComponent extends Component
             __('Validation Precedents'),
             $this->exportHeaders(),
             $this->exportableRows($useCase, $search),
-            Str::slug(__('Validation Precedents')) . '.pdf',
+            Str::slug(__('Validation Precedents')).'.pdf',
             $exporter,
             paperSize: 'letter',
         );
@@ -216,7 +216,7 @@ class ValidationPrecedentComponent extends Component
         return $this->streamExcel(
             $this->exportHeaders(),
             $this->exportableRows($useCase, $search),
-            Str::slug(__('Validation Precedents')) . '.xlsx',
+            Str::slug(__('Validation Precedents')).'.xlsx',
             $exporter,
         );
     }
@@ -301,15 +301,21 @@ class ValidationPrecedentComponent extends Component
     /**
      * Cross-context read (Academic), same reasoning already accepted for
      * RequestComponent::courseOptions() / WaiverRuleComponent::courseOptions().
-     * Narrowed by `$careerId` so the "Carrera" filter above the select
-     * actually restricts what's offered — null shows every course.
+     * Requires a career to be picked first — courses from every career
+     * mixed together made this select unusable, and a course only ever
+     * belongs to one career anyway, so there's no legitimate "no career"
+     * case to support here.
      *
      * @return array<int, array{id: int, label: string}>
      */
     private function courseOptions(?int $careerId = null): array
     {
+        if ($careerId === null) {
+            return [];
+        }
+
         return CourseModel::query()
-            ->when($careerId !== null, fn ($query) => $query->where('career_id', $careerId))
+            ->where('career_id', $careerId)
             ->orderBy('name')
             ->get(['id', 'name', 'code'])
             ->map(fn (CourseModel $c) => [
@@ -320,11 +326,17 @@ class ValidationPrecedentComponent extends Component
     }
 
     /**
+     * Only careers with at least one course loaded — the rest exist in
+     * the `careers` catalog (real UTN San Carlos offerings) but have no
+     * study plan/courses populated yet, so picking one here would leave
+     * the "Equivalent internal course" dropdown empty.
+     *
      * @return array<int, array{id: int, label: string}>
      */
     private function careerOptions(): array
     {
         return CareerModel::query()
+            ->whereHas('courses')
             ->orderBy('name')
             ->get(['id', 'name'])
             ->map(fn (CareerModel $c) => ['id' => $c->id, 'label' => $c->name])

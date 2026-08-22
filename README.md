@@ -14,7 +14,7 @@ Functional Scope
 ID	Requirement	Summary
 ES-01	Requirement waiver requests	Student submits a waiver request with supporting documentation; a per-course, coordinator-configured rule set (minimum grade, accumulated credits, terminal plan membership, or manual review) is evaluated in order and returns an immediate result, deduplicating already-recognized waivers.
 ES-02	External course validation	Student requests recognition of a course passed at another institution, with supporting documents; the system checks a catalog of historical precedents before routing the case to the Technical Validation Committee.
-ES-03	Request status tracking	Students track their request status (Pending, In Review, Approved, Denied); an estimated resolution date is set by the reviewer or auto-assigned after 24 hours, with email notifications on every status change.
+ES-03	Request status tracking	Students track their request status (Pending Review, Approved, Denied — per Registro, 'In Review' was dropped as redundant with 'Pending Review'); an estimated resolution date is set by the reviewer or auto-assigned after 24 hours, with email notifications on every status change.
 ES-04	Centralized inbox for Docencia	A single inbox aggregates every request (waivers and validations), filterable and sortable by type, program, status, and received date.
 
 Adapted from FR-ES-01 through FR-ES-04 of SRS v1.2 (Integrated Academic and Faculty Management System, UTN San Carlos Campus).

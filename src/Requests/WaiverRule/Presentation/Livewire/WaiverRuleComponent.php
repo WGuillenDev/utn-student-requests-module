@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Requests\WaiverRule\Presentation\Livewire;
 
+use App\Infrastructure\Persistence\Eloquent\Academic\Models\CareerModel;
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
 use App\Livewire\Concerns\InteractsWithDataTable;
 use App\Livewire\Concerns\InteractsWithExports;
@@ -51,6 +52,21 @@ class WaiverRuleComponent extends Component
 
     public WaiverRuleForm $form;
 
+    /**
+     * Client-side filter only — narrows the "Course"/"Required course"
+     * selects in the form, same reasoning as
+     * ValidationPrecedentComponent::$filterCareerId. Not part of
+     * WaiverRuleDTO: the entity only stores course_id, never the career.
+     */
+    public ?int $filterCareerId = null;
+
+    public bool $showViewModal = false;
+
+    /**
+     * @var array<string, mixed>|null
+     */
+    public ?array $viewing = null;
+
     public function mount(): void
     {
         $this->authorize('viewAny', WaiverRule::class);
@@ -62,6 +78,7 @@ class WaiverRuleComponent extends Component
         $this->authorize('create', WaiverRule::class);
 
         $this->editingId = null;
+        $this->filterCareerId = null;
         $this->form->reset();
         $this->form->type = 'Always manual review';
         $this->form->active = true;
@@ -75,6 +92,7 @@ class WaiverRuleComponent extends Component
         $this->authorize('update', $waiverRule);
 
         $this->editingId = $id;
+        $this->filterCareerId = CourseModel::query()->whereKey($waiverRule->courseId())->value('career_id');
         $this->form->fromEntity($waiverRule);
         $this->resetValidation();
         $this->showModal = true;
@@ -83,6 +101,49 @@ class WaiverRuleComponent extends Component
     public function closeModal(): void
     {
         $this->showModal = false;
+    }
+
+    public function openViewModal(int $id, FindWaiverRuleUseCase $useCase): void
+    {
+        $waiverRule = $useCase->handle($id);
+        $this->authorize('view', $waiverRule);
+
+        $this->viewing = $this->toRow($waiverRule);
+        $this->showViewModal = true;
+    }
+
+    public function closeViewModal(): void
+    {
+        $this->showViewModal = false;
+        $this->viewing = null;
+    }
+
+    /**
+     * Switching the "Carrera" filter narrows courseOptions() — clear
+     * whichever of the two course selects no longer belongs to that
+     * career, so the form can't submit a mismatched pair silently. Same
+     * reasoning as ValidationPrecedentComponent::updatedFilterCareerId().
+     */
+    public function updatedFilterCareerId(): void
+    {
+        if ($this->filterCareerId === null) {
+            return;
+        }
+
+        foreach (['courseId', 'requiredCourseId'] as $field) {
+            if ($this->form->{$field} === null) {
+                continue;
+            }
+
+            $stillValid = CourseModel::query()
+                ->whereKey($this->form->{$field})
+                ->where('career_id', $this->filterCareerId)
+                ->exists();
+
+            if (! $stillValid) {
+                $this->form->{$field} = null;
+            }
+        }
     }
 
     public function save(
@@ -129,7 +190,7 @@ class WaiverRuleComponent extends Component
             __('Waiver Rules'),
             $this->exportHeaders(),
             $this->exportableRows($useCase, $search),
-            Str::slug(__('Waiver Rules')) . '.pdf',
+            Str::slug(__('Waiver Rules')).'.pdf',
             $exporter,
             paperSize: 'letter',
         );
@@ -142,7 +203,7 @@ class WaiverRuleComponent extends Component
         return $this->streamExcel(
             $this->exportHeaders(),
             $this->exportableRows($useCase, $search),
-            Str::slug(__('Waiver Rules')) . '.xlsx',
+            Str::slug(__('Waiver Rules')).'.xlsx',
             $exporter,
         );
     }
@@ -153,7 +214,9 @@ class WaiverRuleComponent extends Component
             ? $this->renderServerMode($useCase)
             : $this->renderClientMode($useCase);
 
-        $view = $view->with('courseOptions', $this->courseOptions());
+        $view = $view
+            ->with('careerOptions', $this->careerOptions())
+            ->with('courseOptions', $this->courseOptions($this->filterCareerId));
 
         /** @disregard P1013 Livewire registra ->layout() como macro en runtime sobre Illuminate\View\View */
         return $view->layout('components.layouts.dashboard', [
@@ -219,6 +282,9 @@ class WaiverRuleComponent extends Component
             'order' => $waiverRule->order(),
             'type' => $waiverRule->type(),
             'requiredCourseId' => $waiverRule->requiredCourseId(),
+            'requiredCourseLabel' => $waiverRule->requiredCourseId() !== null
+                ? ($courses[$waiverRule->requiredCourseId()] ?? (string) $waiverRule->requiredCourseId())
+                : null,
             'minimumGrade' => $waiverRule->minimumGrade(),
             'minimumAccumulated' => $waiverRule->minimumAccumulated(),
             'active' => $waiverRule->active(),
@@ -276,19 +342,42 @@ class WaiverRuleComponent extends Component
     /**
      * Cross-context read (Academic), same reasoning already accepted for
      * RequestComponent::courseOptions() — used both for the "course" and
-     * "required course" selects of the create/edit modal.
+     * "required course" selects of the create/edit modal. Requires a
+     * career to be picked first, same reasoning as
+     * ValidationPrecedentComponent::courseOptions().
      *
      * @return array<int, array{id: int, label: string}>
      */
-    private function courseOptions(): array
+    private function courseOptions(?int $careerId = null): array
     {
+        if ($careerId === null) {
+            return [];
+        }
+
         return CourseModel::query()
+            ->where('career_id', $careerId)
             ->orderBy('name')
             ->get(['id', 'name', 'code'])
             ->map(fn (CourseModel $c) => [
                 'id' => $c->id,
                 'label' => "{$c->code} — {$c->name}",
             ])
+            ->all();
+    }
+
+    /**
+     * Only careers with at least one course loaded — same reasoning as
+     * ValidationPrecedentComponent::careerOptions().
+     *
+     * @return array<int, array{id: int, label: string}>
+     */
+    private function careerOptions(): array
+    {
+        return CareerModel::query()
+            ->whereHas('courses')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (CareerModel $c) => ['id' => $c->id, 'label' => $c->name])
             ->all();
     }
 

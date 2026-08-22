@@ -177,6 +177,7 @@ class RequestComponent extends Component
             'requiredCourse' => $request->requiredCourseId() !== null
                 ? ($courses[$request->requiredCourseId()] ?? (string) $request->requiredCourseId())
                 : null,
+            'waiverJustification' => $request->waiverJustification(),
             'originInstitution' => $request->originInstitution(),
             'externalCourse' => $request->externalCourse(),
             'engineResult' => $request->engineResult(),
@@ -468,5 +469,4 @@ class RequestComponent extends Component
             ])
             ->all();
     }
-
 }

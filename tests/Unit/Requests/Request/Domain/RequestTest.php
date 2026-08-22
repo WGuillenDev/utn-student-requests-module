@@ -54,12 +54,13 @@ final class RequestTest extends TestCase
             type: 'Requirement Waiver',
             courseId: 10,
             requiredCourseId: null,
+            waiverJustification: null,
             originInstitution: null,
             externalCourse: null,
             validationPrecedentId: null,
             engineResult: null,
             violatedRuleId: null,
-            status: 'In Review',
+            status: 'Pending Review',
             estimatedResolutionDate: null,
             reviewerId: 42,
         );
@@ -72,18 +73,11 @@ final class RequestTest extends TestCase
         $this->assertSame(42, $request->reviewerId());
     }
 
-    public function test_in_review_and_pending_review_are_not_final(): void
+    public function test_pending_review_is_not_final(): void
     {
         $pending = Request::create(studentId: 1, type: 'Requirement Waiver', courseId: 10);
-        $inReview = Request::reconstitute(
-            id: 1, studentId: 1, type: 'Requirement Waiver', courseId: 10,
-            requiredCourseId: null, originInstitution: null, externalCourse: null,
-            validationPrecedentId: null, engineResult: null, violatedRuleId: null,
-            status: 'In Review', estimatedResolutionDate: null, reviewerId: null,
-        );
 
         $this->assertFalse($pending->isFinal());
-        $this->assertFalse($inReview->isFinal());
     }
 
     /**
@@ -93,7 +87,7 @@ final class RequestTest extends TestCase
     {
         $request = Request::reconstitute(
             id: 1, studentId: 1, type: 'Requirement Waiver', courseId: 10,
-            requiredCourseId: null, originInstitution: null, externalCourse: null,
+            requiredCourseId: null, waiverJustification: null, originInstitution: null, externalCourse: null,
             validationPrecedentId: null, engineResult: null, violatedRuleId: null,
             status: $finalStatus, estimatedResolutionDate: null, reviewerId: null,
         );
@@ -122,7 +116,7 @@ final class RequestTest extends TestCase
         // docblock: the reviewer may set this while still deciding.
         $request = Request::reconstitute(
             id: 1, studentId: 1, type: 'Requirement Waiver', courseId: 10,
-            requiredCourseId: null, originInstitution: null, externalCourse: null,
+            requiredCourseId: null, waiverJustification: null, originInstitution: null, externalCourse: null,
             validationPrecedentId: null, engineResult: null, violatedRuleId: null,
             status: 'Approved', estimatedResolutionDate: null, reviewerId: null,
         );
@@ -168,7 +162,7 @@ final class RequestTest extends TestCase
         $createdAt = new \DateTimeImmutable('2026-08-01 09:00:00');
         $request = Request::reconstitute(
             id: 1, studentId: 1, type: 'Requirement Waiver', courseId: 10,
-            requiredCourseId: null, originInstitution: null, externalCourse: null,
+            requiredCourseId: null, waiverJustification: null, originInstitution: null, externalCourse: null,
             validationPrecedentId: null, engineResult: null, violatedRuleId: null,
             status: 'Approved', estimatedResolutionDate: null, reviewerId: null,
             createdAt: $createdAt->format('Y-m-d H:i:s'),
@@ -246,6 +240,7 @@ final class RequestTest extends TestCase
             type: 'Requirement Waiver',
             courseId: 10,
             requiredCourseId: null,
+            waiverJustification: null,
             originInstitution: null,
             externalCourse: null,
             validationPrecedentId: null,

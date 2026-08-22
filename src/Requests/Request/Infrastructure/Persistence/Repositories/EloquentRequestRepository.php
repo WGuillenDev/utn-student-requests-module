@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Src\Requests\Request\Infrastructure\Persistence\Repositories;
 
 use App\Infrastructure\Persistence\Eloquent\Requests\Models\RequestModel;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Src\Requests\Request\Domain\Contracts\RequestRepositoryInterface;
 use Src\Requests\Request\Domain\Entities\Request;
 
@@ -33,7 +35,7 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         $column = in_array($sortBy, self::SORTABLE_COLUMNS, true) ? $sortBy : 'created_at';
         $direction = $sortDir === 'desc' ? 'desc' : 'asc';
 
-        /** @var \Illuminate\Database\Eloquent\Collection<int, RequestModel> $models */
+        /** @var Collection<int, RequestModel> $models */
         $models = $query->orderBy($column, $direction)->get();
 
         return $models->map($this->toDomain(...))->all();
@@ -87,12 +89,13 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
     {
         $model = $request->id()
             ? RequestModel::query()->findOrFail($request->id())
-            : new RequestModel();
+            : new RequestModel;
 
         $model->student_id = $request->studentId();
         $model->type = $request->type();
         $model->course_id = $request->courseId();
         $model->required_course_id = $request->requiredCourseId();
+        $model->waiver_justification = $request->waiverJustification();
         $model->origin_institution = $request->originInstitution();
         $model->external_course = $request->externalCourse();
         $model->validation_precedent_id = $request->validationPrecedentId();
@@ -123,11 +126,11 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
     }
 
     /**
-     * @param array<string, mixed> $filters See interface docblock for
-     *   recognized keys — every one is optional and simply skipped when
-     *   absent or empty, so callers can pass a sparse array freely.
+     * @param  array<string, mixed>  $filters  See interface docblock for
+     *                                         recognized keys — every one is optional and simply skipped when
+     *                                         absent or empty, so callers can pass a sparse array freely.
      */
-    private function baseQuery(?string $search, array $filters = []): \Illuminate\Database\Eloquent\Builder
+    private function baseQuery(?string $search, array $filters = []): Builder
     {
         $query = RequestModel::query()->with('student');
 
@@ -145,7 +148,6 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
 
             $statusMatches = collect([
                 'Pending Review' => __('Pending Review'),
-                'In Review' => __('In Review'),
                 'Approved' => __('Approved'),
                 'Denied' => __('Denied'),
             ])->filter(fn (string $label): bool => stripos($label, $search) !== false)->keys()->all();
@@ -213,6 +215,7 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
             type: $model->type,
             courseId: $model->course_id,
             requiredCourseId: $model->required_course_id,
+            waiverJustification: $model->waiver_justification,
             originInstitution: $model->origin_institution,
             externalCourse: $model->external_course,
             validationPrecedentId: $model->validation_precedent_id,

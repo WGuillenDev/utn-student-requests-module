@@ -33,6 +33,7 @@ final class Request
         private readonly string $type,
         private readonly int $courseId,
         private ?int $requiredCourseId,
+        private readonly ?string $waiverJustification,
         private ?string $originInstitution,
         private ?string $externalCourse,
         private ?int $validationPrecedentId,
@@ -57,6 +58,7 @@ final class Request
         string $type,
         int $courseId,
         ?int $requiredCourseId = null,
+        ?string $waiverJustification = null,
         ?string $originInstitution = null,
         ?string $externalCourse = null,
         ?int $validationPrecedentId = null,
@@ -69,6 +71,7 @@ final class Request
             type: $type,
             courseId: $courseId,
             requiredCourseId: $requiredCourseId,
+            waiverJustification: $waiverJustification,
             originInstitution: $originInstitution,
             externalCourse: $externalCourse,
             validationPrecedentId: $validationPrecedentId,
@@ -87,6 +90,7 @@ final class Request
         string $type,
         int $courseId,
         ?int $requiredCourseId,
+        ?string $waiverJustification,
         ?string $originInstitution,
         ?string $externalCourse,
         ?int $validationPrecedentId,
@@ -103,6 +107,7 @@ final class Request
             type: $type,
             courseId: $courseId,
             requiredCourseId: $requiredCourseId,
+            waiverJustification: $waiverJustification,
             originInstitution: $originInstitution,
             externalCourse: $externalCourse,
             validationPrecedentId: $validationPrecedentId,
@@ -209,6 +214,11 @@ final class Request
     public function requiredCourseId(): ?int
     {
         return $this->requiredCourseId;
+    }
+
+    public function waiverJustification(): ?string
+    {
+        return $this->waiverJustification;
     }
 
     public function originInstitution(): ?string

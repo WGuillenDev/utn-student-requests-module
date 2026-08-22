@@ -20,7 +20,7 @@
         <div class="card-head">
             <span class="card-title">{{ __('New waiver request') }}</span>
         </div>
-        <div style="padding:16px; display:flex; flex-direction:column; gap:16px; max-width:520px;">
+        <div style="padding:16px; display:flex; flex-direction:column; gap:16px; max-width:640px;">
             <div class="form-field">
                 <label for="waiverCourse">{{ __('Course to enroll') }}</label>
                 <select id="waiverCourse" wire:model="waiverForm.courseId" class="{{ $errors->has('waiverForm.courseId') ? 'has-error' : '' }}">
@@ -41,6 +41,22 @@
                     @endforeach
                 </select>
                 @error('waiverForm.requiredCourseId') <span class="form-error">{{ $message }}</span> @enderror
+            </div>
+
+            <div class="form-field">
+                <label>{{ __('Justification') }} <span style="opacity:.6;">({{ __('Select only one option') }})</span></label>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    @foreach (\Src\Requests\Request\Presentation\Livewire\Forms\WaiverRequestForm::JUSTIFICATIONS as $letter => $option)
+                    <label
+                        class="option-card"
+                        style="display:flex; align-items:flex-start; gap:10px; border:1px solid var(--border); border-radius:10px; padding:14px 16px; cursor:pointer;"
+                    >
+                        <input type="radio" wire:model="waiverForm.justification" value="{{ $option }}" style="margin-top:3px; flex-shrink:0;">
+                        <span><strong>{{ chr(97 + $letter) }}.</strong> {{ __($option) }}</span>
+                    </label>
+                    @endforeach
+                </div>
+                @error('waiverForm.justification') <span class="form-error">{{ $message }}</span> @enderror
             </div>
 
             <div class="form-field">
@@ -73,6 +89,17 @@
                 @enderror
             </div>
 
+            <div style="background:var(--actionEditBg); color:var(--actionEditText); border-radius:10px; padding:16px; display:flex; flex-direction:column; gap:10px;">
+                <strong>{{ __('Important notes') }}</strong>
+                <p style="margin:0;">{{ __('You must enroll in the course for which you are requesting the requirement waiver in the same term this request is approved. Administrative Directive DA-VDOC-01-2020.') }}</p>
+                <p style="margin:0;">{{ __('If you fail the course for which you requested the waiver, you will not be able to request a waiver for that course again. Administrative Directive DA-VDOC-01-2020.') }}</p>
+                <label class="permission-item" style="color:inherit; font-weight:600;">
+                    <input type="checkbox" wire:model="waiverForm.noticeAccepted">
+                    <span>{{ __('I have read and accept the important notes above.') }}</span>
+                </label>
+                @error('waiverForm.noticeAccepted') <span class="form-error">{{ $message }}</span> @enderror
+            </div>
+
             <div>
                 <button type="button" class="btn btn-primary" wire:click="submitWaiver" wire:loading.attr="disabled" wire:target="submitWaiver,waiverForm.supportDocument">
                     {{ __('Submit request') }}
@@ -85,122 +112,81 @@
         <div class="card-head">
             <span class="card-title">{{ __('New validation request') }}</span>
         </div>
-        <div style="padding:16px; display:flex; flex-direction:column; gap:16px; max-width:520px;">
-            <div class="form-field">
-                <label for="validationCourse">{{ __('Equivalent internal course') }}</label>
-                <select id="validationCourse" wire:model="validationForm.courseId" class="{{ $errors->has('validationForm.courseId') ? 'has-error' : '' }}">
-                    <option value="">{{ __('Select a course') }}</option>
-                    @foreach ($courseOptions as $option)
-                    <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+        <div style="padding:16px; display:flex; flex-direction:column; gap:16px;">
+            <div>
+                <p style="font-weight:700; margin-bottom:4px;">{{ __('Courses to validate') }}</p>
+                <p style="opacity:.6; font-size:13px; margin:0;">{{ __('You can request one or several courses in the same submission (up to :max).', ['max' => \Src\Requests\Request\Presentation\Livewire\Forms\ValidationRequestForm::MAX_COURSES]) }}</p>
+            </div>
+
+            <div class="table-scroll">
+                <div class="table-inner" style="--table-cols: 1.4fr 1.6fr 1.6fr 56px; min-width:640px;">
+                    <div class="data-row-head">
+                        <span>{{ __('UTN course') }}</span>
+                        <span>{{ __('External course name') }}</span>
+                        <span>{{ __('Origin university') }}</span>
+                        <span></span>
+                    </div>
+                    @foreach ($validationForm->courses as $index => $course)
+                    <div class="data-row" wire:key="validation-course-row-{{ $index }}" style="align-items:start;">
+                        <div class="form-field" style="margin:0;">
+                            <select wire:model="validationForm.courses.{{ $index }}.courseId" class="{{ $errors->has("validationForm.courses.$index.courseId") ? 'has-error' : '' }}">
+                                <option value="">{{ __('Select a course') }}</option>
+                                @foreach ($courseOptions as $option)
+                                <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                                @endforeach
+                            </select>
+                            @error("validationForm.courses.$index.courseId") <span class="form-error">{{ $message }}</span> @enderror
+                        </div>
+                        <div class="form-field" style="margin:0;">
+                            <input type="text" placeholder="{{ __('Eg. Programming I') }}" wire:model="validationForm.courses.{{ $index }}.externalCourse" class="{{ $errors->has("validationForm.courses.$index.externalCourse") ? 'has-error' : '' }}">
+                            @error("validationForm.courses.$index.externalCourse") <span class="form-error">{{ $message }}</span> @enderror
+                        </div>
+                        <div class="form-field" style="margin:0;">
+                            <input type="text" placeholder="{{ __('Eg. University of Costa Rica') }}" wire:model="validationForm.courses.{{ $index }}.originInstitution" class="{{ $errors->has("validationForm.courses.$index.originInstitution") ? 'has-error' : '' }}">
+                            @error("validationForm.courses.$index.originInstitution") <span class="form-error">{{ $message }}</span> @enderror
+                        </div>
+                        <button type="button" class="btn btn-secondary" wire:click="removeValidationCourse({{ $index }})" @disabled(count($validationForm->courses) <= 1) aria-label="{{ __('Remove course') }}">&times;</button>
+                    </div>
                     @endforeach
-                </select>
-                @error('validationForm.courseId') <span class="form-error">{{ $message }}</span> @enderror
-            </div>
-
-            <div class="form-field">
-                <label for="validationInstitution">{{ __('Origin institution') }}</label>
-                <input type="text" id="validationInstitution" wire:model="validationForm.originInstitution" class="{{ $errors->has('validationForm.originInstitution') ? 'has-error' : '' }}">
-                @error('validationForm.originInstitution') <span class="form-error">{{ $message }}</span> @enderror
-            </div>
-
-            <div class="form-field">
-                <label for="validationExternalCourse">{{ __('External course name') }}</label>
-                <input type="text" id="validationExternalCourse" wire:model="validationForm.externalCourse" class="{{ $errors->has('validationForm.externalCourse') ? 'has-error' : '' }}">
-                @error('validationForm.externalCourse') <span class="form-error">{{ $message }}</span> @enderror
-            </div>
-
-            <div class="form-field">
-                <label for="validationExternalProgram">{{ __('External course syllabus') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
-                @if ($validationForm->externalProgramFile && ! $errors->has('validationForm.externalProgramFile'))
-                    <div class="file-chip">
-                        <span class="file-chip-name">{{ $validationForm->externalProgramFile->getClientOriginalName() }}</span>
-                        <button type="button" class="file-chip-remove" wire:click="removeFile('validationForm.externalProgramFile')" aria-label="{{ __('Remove file') }}">&times;</button>
-                    </div>
-                @else
-                    <div
-                        x-data="{ dragging: false }"
-                        x-on:dragover.prevent="dragging = true"
-                        x-on:dragleave.prevent="dragging = false"
-                        x-on:drop.prevent="
-                            dragging = false;
-                            $refs.validationExternalProgram.files = $event.dataTransfer.files;
-                            $refs.validationExternalProgram.dispatchEvent(new Event('change'));
-                        "
-                        :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
-                    >
-                        <input type="file" id="validationExternalProgram" x-ref="validationExternalProgram" wire:model="validationForm.externalProgramFile" class="{{ $errors->has('validationForm.externalProgramFile') ? 'has-error' : '' }}">
-                        <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
-                    </div>
-                @endif
-                @error('validationForm.externalProgramFile')
-                    <span class="form-error">{{ $message }}</span>
-                @elseif ($validationForm->externalProgramFile)
-                    <span class="form-success">{{ __('File attached') }}</span>
-                @enderror
-            </div>
-
-            <div class="form-field">
-                <label for="validationGradeCertification">{{ __('Grade certification') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
-                @if ($validationForm->gradeCertificationFile && ! $errors->has('validationForm.gradeCertificationFile'))
-                    <div class="file-chip">
-                        <span class="file-chip-name">{{ $validationForm->gradeCertificationFile->getClientOriginalName() }}</span>
-                        <button type="button" class="file-chip-remove" wire:click="removeFile('validationForm.gradeCertificationFile')" aria-label="{{ __('Remove file') }}">&times;</button>
-                    </div>
-                @else
-                    <div
-                        x-data="{ dragging: false }"
-                        x-on:dragover.prevent="dragging = true"
-                        x-on:dragleave.prevent="dragging = false"
-                        x-on:drop.prevent="
-                            dragging = false;
-                            $refs.validationGradeCertification.files = $event.dataTransfer.files;
-                            $refs.validationGradeCertification.dispatchEvent(new Event('change'));
-                        "
-                        :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
-                    >
-                        <input type="file" id="validationGradeCertification" x-ref="validationGradeCertification" wire:model="validationForm.gradeCertificationFile" class="{{ $errors->has('validationForm.gradeCertificationFile') ? 'has-error' : '' }}">
-                        <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
-                    </div>
-                @endif
-                @error('validationForm.gradeCertificationFile')
-                    <span class="form-error">{{ $message }}</span>
-                @elseif ($validationForm->gradeCertificationFile)
-                    <span class="form-success">{{ __('File attached') }}</span>
-                @enderror
-            </div>
-
-            <div class="form-field">
-                <label for="validationInstitutionProof">{{ __('Institution proof') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
-                @if ($validationForm->institutionProofFile && ! $errors->has('validationForm.institutionProofFile'))
-                    <div class="file-chip">
-                        <span class="file-chip-name">{{ $validationForm->institutionProofFile->getClientOriginalName() }}</span>
-                        <button type="button" class="file-chip-remove" wire:click="removeFile('validationForm.institutionProofFile')" aria-label="{{ __('Remove file') }}">&times;</button>
-                    </div>
-                @else
-                    <div
-                        x-data="{ dragging: false }"
-                        x-on:dragover.prevent="dragging = true"
-                        x-on:dragleave.prevent="dragging = false"
-                        x-on:drop.prevent="
-                            dragging = false;
-                            $refs.validationInstitutionProof.files = $event.dataTransfer.files;
-                            $refs.validationInstitutionProof.dispatchEvent(new Event('change'));
-                        "
-                        :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
-                    >
-                        <input type="file" id="validationInstitutionProof" x-ref="validationInstitutionProof" wire:model="validationForm.institutionProofFile" class="{{ $errors->has('validationForm.institutionProofFile') ? 'has-error' : '' }}">
-                        <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
-                    </div>
-                @endif
-                @error('validationForm.institutionProofFile')
-                    <span class="form-error">{{ $message }}</span>
-                @elseif ($validationForm->institutionProofFile)
-                    <span class="form-success">{{ __('File attached') }}</span>
-                @enderror
+                </div>
             </div>
 
             <div>
-                <button type="button" class="btn btn-primary" wire:click="submitValidation" wire:loading.attr="disabled" wire:target="submitValidation,validationForm.externalProgramFile,validationForm.gradeCertificationFile,validationForm.institutionProofFile">
+                <button type="button" class="btn btn-secondary" wire:click="addValidationCourse" @disabled(count($validationForm->courses) >= \Src\Requests\Request\Presentation\Livewire\Forms\ValidationRequestForm::MAX_COURSES)>
+                    + {{ __('Add course') }}
+                </button>
+            </div>
+
+            <div class="form-field">
+                <label>{{ __('Required documents') }}: <span style="opacity:.6;">({{ __('PDF, JPG or PNG · Max. 10MB each') }})</span></label>
+
+                @foreach ($validationForm->documents as $index => $document)
+                <div class="file-chip" wire:key="validation-document-chip-{{ $index }}">
+                    <span class="file-chip-name">{{ $document->getClientOriginalName() }}</span>
+                    <button type="button" class="file-chip-remove" wire:click="removeValidationDocument({{ $index }})" aria-label="{{ __('Remove file') }}">&times;</button>
+                </div>
+                @endforeach
+
+                <div
+                    x-data="{ dragging: false }"
+                    x-on:dragover.prevent="dragging = true"
+                    x-on:dragleave.prevent="dragging = false"
+                    x-on:drop.prevent="
+                        dragging = false;
+                        $refs.validationDocuments.files = $event.dataTransfer.files;
+                        $refs.validationDocuments.dispatchEvent(new Event('change'));
+                    "
+                    :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                >
+                    <input type="file" multiple x-ref="validationDocuments" wire:model="validationForm.documents" class="{{ $errors->has('validationForm.documents') ? 'has-error' : '' }}">
+                    <p class="dropzone-hint">{{ __('Upload the files your request needs, or drag them here') }}</p>
+                </div>
+                @error('validationForm.documents') <span class="form-error">{{ $message }}</span> @enderror
+                @error('validationForm.documents.*') <span class="form-error">{{ $message }}</span> @enderror
+            </div>
+
+            <div>
+                <button type="button" class="btn btn-primary" wire:click="submitValidation" wire:loading.attr="disabled" wire:target="submitValidation,validationForm.documents">
                     {{ __('Submit request') }}
                 </button>
             </div>
@@ -212,7 +198,6 @@
                 ['key' => 'type', 'label' => __('Type'), 'sortable' => true],
                 ['key' => 'course', 'label' => __('Course'), 'sortable' => false],
                 ['key' => 'status', 'label' => __('Status'), 'sortable' => true],
-                ['key' => 'result', 'label' => __('Result'), 'sortable' => false],
                 ['key' => 'estimated_resolution_date', 'label' => __('Estimated date'), 'sortable' => true],
             ]"
         mode="server"
@@ -222,7 +207,7 @@
         :sort-key="$sortKey"
         :sort-dir="$sortDir"
         :per-page="$perPage"
-        table-cols="1.6fr 2fr 1.4fr 1.6fr 1.2fr 1fr"
+        table-cols="1.6fr 2fr 1.4fr 1.2fr 1fr"
         :can-create="false"
         :can-search="false"
         :can-export-pdf="false"
@@ -240,7 +225,6 @@
             <span>
                 <span class="status-badge {{ $row['statusVariant'] }}">{{ __($row['status']) }}</span>
             </span>
-            <span>{{ $row['result'] ? __($row['result']) : __('Pending') }}</span>
             <span>{{ $row['estimatedDate'] ?? '—' }}</span>
             <div class="actions-cell">
                 <x-ui.row-actions
@@ -288,6 +272,10 @@
             <label>{{ __('Unmet requirement') }}</label>
             <p>{{ $viewingRequest['requiredCourse'] }}</p>
         </div>
+        <div class="form-field">
+            <label>{{ __('Justification') }}</label>
+            <p>{{ $viewingRequest['waiverJustification'] ? __($viewingRequest['waiverJustification']) : '—' }}</p>
+        </div>
         @else
         <div class="form-field">
             <label>{{ __('Origin institution') }}</label>
@@ -311,8 +299,5 @@
             <p>{{ $viewingRequest['estimatedDate'] ?? '—' }}</p>
         </div>
         @endif
-        <x-slot:footer>
-            <button type="button" class="btn btn-secondary" wire:click="closeViewModal">{{ __('Close') }}</button>
-        </x-slot:footer>
     </x-ui.modal>
 </div>

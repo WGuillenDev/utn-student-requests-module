@@ -25,7 +25,7 @@ class RequestModel extends Model
     protected $table = 'requests';
 
     protected $fillable = [
-        'student_id', 'type', 'course_id', 'required_course_id',
+        'student_id', 'type', 'course_id', 'required_course_id', 'waiver_justification',
         'origin_institution', 'external_course', 'validation_precedent_id',
         'engine_result', 'violated_rule_id', 'status',
         'estimated_resolution_date', 'reviewer_id',

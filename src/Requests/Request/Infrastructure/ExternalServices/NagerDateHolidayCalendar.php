@@ -46,8 +46,8 @@ final class NagerDateHolidayCalendar implements HolidayCalendarInterface
     {
         return Cache::remember(
             "holiday-calendar:cr:{$year}",
-            now: now()->addDay(),
-            callback: function () use ($year): array {
+            now()->addDay(),
+            function () use ($year): array {
                 try {
                     $response = Http::timeout(3)->get(self::BASE_URL.'/'.$year.'/'.self::COUNTRY_CODE);
 

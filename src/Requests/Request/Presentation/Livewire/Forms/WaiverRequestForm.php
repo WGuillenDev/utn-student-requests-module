@@ -21,11 +21,36 @@ class WaiverRequestForm extends Form
 {
     use StoresRequestAttachments;
 
+    /**
+     * One of these 5 fixed categories, per SLR-002 — Docencia's paper
+     * form for this request type. Kept as English enum values (see
+     * the `requests.waiver_justification` migration) with the Spanish
+     * wording only in the label translations, same as `type`/`status`.
+     *
+     * @var array<int, string>
+     */
+    public const JUSTIFICATIONS = [
+        'Only Pending Requirement',
+        'Final Level Parallel Enrollment',
+        'Delayed Course Offering',
+        'Minimum Academic Load',
+        'Prior Knowledge Sufficiency',
+    ];
+
     public ?int $courseId = null;
 
     public ?int $requiredCourseId = null;
 
+    public ?string $justification = null;
+
     public $supportDocument = null;
+
+    /**
+     * Gate only — never persisted. The two "Notas importantes" paragraphs
+     * come from Directriz Administrativa DA-VDOC-01-2020; requiring this
+     * checkbox just proves the student saw them before submitting.
+     */
+    public bool $noticeAccepted = false;
 
     /**
      * @return array<string, mixed>
@@ -35,7 +60,9 @@ class WaiverRequestForm extends Form
         return [
             'courseId' => ['required', 'integer', 'exists:courses,id'],
             'requiredCourseId' => ['required', 'integer', 'exists:courses,id'],
+            'justification' => ['required', 'string', 'in:'.implode(',', self::JUSTIFICATIONS)],
             'supportDocument' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'noticeAccepted' => ['accepted'],
         ];
     }
 
@@ -46,6 +73,7 @@ class WaiverRequestForm extends Form
             type: 'Requirement Waiver',
             courseId: (int) $this->courseId,
             requiredCourseId: (int) $this->requiredCourseId,
+            waiverJustification: $this->justification,
             attachments: [
                 $this->storeAttachment($this->supportDocument, 'support_document'),
             ],

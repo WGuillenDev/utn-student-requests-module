@@ -17,7 +17,7 @@
                 ['key' => 'courseLabel', 'label' => __('Course'), 'sortable' => false],
                 ['key' => 'order', 'label' => __('Order'), 'sortable' => true],
                 ['key' => 'type', 'label' => __('Type'), 'sortable' => true],
-                ['key' => 'active', 'label' => __('Active'), 'sortable' => true],
+                ['key' => 'active', 'label' => __('Status'), 'sortable' => true],
             ]"
         :mode="$tableMode"
         :rows="$rows ?? []"
@@ -49,12 +49,14 @@
                 }[row.type]"></span>
                 <span>
                     <span class="status-badge positive" x-show="row.active">{{ __('Active') }}</span>
-                    <span class="status-badge neutral" x-show="!row.active">{{ __('Inactive') }}</span>
+                    <span class="status-badge negative" x-show="!row.active">{{ __('Inactive') }}</span>
                 </span>
                 <div class="actions-cell">
                     <x-ui.row-actions
+                        :can-view="Auth::user()->hasPermissionTo('waiver_rules.view')"
                         :can-edit="Auth::user()->hasPermissionTo('waiver_rules.edit')"
                         :can-delete="Auth::user()->hasPermissionTo('waiver_rules.delete')"
+                        view-action="$wire.openViewModal(row.id)"
                         edit-action="$wire.openEditModal(row.id)"
                         delete-id="row.id" />
                 </div>
@@ -73,13 +75,15 @@
                 @if ($waiverRule->active())
                 <span class="status-badge positive">{{ __('Active') }}</span>
                 @else
-                <span class="status-badge neutral">{{ __('Inactive') }}</span>
+                <span class="status-badge negative">{{ __('Inactive') }}</span>
                 @endif
             </span>
             <div class="actions-cell">
                 <x-ui.row-actions
+                    :can-view="Auth::user()->can('view', $waiverRule)"
                     :can-edit="Auth::user()->can('update', $waiverRule)"
                     :can-delete="Auth::user()->can('delete', $waiverRule)"
+                    view-action="$wire.openViewModal({{ $waiverRule->id() }})"
                     edit-action="$wire.openEditModal({{ $waiverRule->id() }})"
                     delete-id="{{ $waiverRule->id() }}" />
             </div>
@@ -92,6 +96,16 @@
 
     <x-ui.modal :show="$showModal" :title="$editingId === null ? __('New waiver rule') : __('Edit waiver rule')">
         <div class="form-field">
+            <label for="waiverRuleCareer">{{ __('Career') }}</label>
+            <select id="waiverRuleCareer" wire:model.live="filterCareerId">
+                <option value="">{{ __('Select a career') }}</option>
+                @foreach ($careerOptions as $option)
+                <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div class="form-field">
             <label for="waiverRuleCourse">{{ __('Course') }}</label>
             <select id="waiverRuleCourse" wire:model="form.courseId" class="{{ $errors->has('form.courseId') ? 'has-error' : '' }}">
                 <option value="">{{ __('Select a course') }}</option>
@@ -100,6 +114,9 @@
                 @endforeach
             </select>
             @error('form.courseId') <span class="form-error">{{ $message }}</span> @enderror
+            @if ($filterCareerId === null)
+            <span class="form-error">{{ __('You must select a career before choosing a course.') }}</span>
+            @endif
         </div>
 
         <div class="form-field">
@@ -130,6 +147,9 @@
                 @endforeach
             </select>
             @error('form.requiredCourseId') <span class="form-error">{{ $message }}</span> @enderror
+            @if ($filterCareerId === null)
+            <span class="form-error">{{ __('You must select a career before choosing a course.') }}</span>
+            @endif
         </div>
         <div class="form-field">
             <label for="waiverRuleMinimumGrade">{{ __('Minimum grade') }}</label>
@@ -155,6 +175,52 @@
             <button type="button" class="btn btn-secondary" wire:click="closeModal">{{ __('Cancel') }}</button>
             <button type="button" class="btn btn-primary" wire:click="save">{{ __('Confirm') }}</button>
         </x-slot:footer>
+    </x-ui.modal>
+
+    <x-ui.modal :show="$showViewModal" :title="__('Waiver rule detail')" close-action="closeViewModal">
+        @if ($viewing)
+        <div class="form-field">
+            <label>{{ __('Course') }}</label>
+            <p>{{ $viewing['courseLabel'] }}</p>
+        </div>
+
+        <div class="form-field">
+            <label>{{ __('Order') }}</label>
+            <p>{{ $viewing['order'] }}</p>
+        </div>
+
+        <div class="form-field">
+            <label>{{ __('Type') }}</label>
+            <p>{{ __($viewing['type']) }}</p>
+        </div>
+
+        @if ($viewing['type'] === 'Approved requirement with minimum grade')
+        <div class="form-field">
+            <label>{{ __('Required course') }}</label>
+            <p>{{ $viewing['requiredCourseLabel'] }}</p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('Minimum grade') }}</label>
+            <p>{{ $viewing['minimumGrade'] }}</p>
+        </div>
+        @elseif ($viewing['type'] === 'Accumulated credits or courses')
+        <div class="form-field">
+            <label>{{ __('Minimum accumulated') }}</label>
+            <p>{{ $viewing['minimumAccumulated'] }}</p>
+        </div>
+        @endif
+
+        <div class="form-field">
+            <label>{{ __('Status') }}</label>
+            <p>
+                @if ($viewing['active'])
+                <span class="status-badge positive">{{ __('Active') }}</span>
+                @else
+                <span class="status-badge negative">{{ __('Inactive') }}</span>
+                @endif
+            </p>
+        </div>
+        @endif
     </x-ui.modal>
 
     <x-ui.confirm-delete-modal :success-text="__('The waiver rule has been deleted.')" />

@@ -59,7 +59,7 @@
                 <span class="status-badge {{ match(true) {
                         $status === 'Approved' => 'positive',
                         $status === 'Denied' => 'negative',
-                        $status === 'Pending Review', $status === 'In Review' => 'pending',
+                        $status === 'Pending Review' => 'pending',
                         default => '',
                     } }}">{{ __($status) }}</span>
             </span>
@@ -288,6 +288,10 @@
             <p>{{ $viewingRequest['requiredCourse'] ?? '—' }}</p>
         </div>
         <div class="form-field">
+            <label>{{ __('Justification') }}</label>
+            <p>{{ $viewingRequest['waiverJustification'] ? __($viewingRequest['waiverJustification']) : '—' }}</p>
+        </div>
+        <div class="form-field">
             <label>{{ __('Engine result') }}</label>
             <p>{{ $viewingRequest['engineResult'] ? __($viewingRequest['engineResult']) : __('Requires manual review') }}</p>
         </div>
@@ -342,9 +346,6 @@
             @endif
         </div>
         @endif
-        <x-slot:footer>
-            <button type="button" class="btn btn-secondary" wire:click="closeViewModal">{{ __('Close') }}</button>
-        </x-slot:footer>
     </x-ui.modal>
 
     <x-ui.modal :show="$showReviewModal" :title="__('Review request')" close-action="closeReviewModal">
@@ -359,7 +360,6 @@
             <label for="reviewStatus">{{ __('New status') }}</label>
             <select id="reviewStatus" wire:model="reviewStatus">
                 <option value="Pending Review">{{ __('Pending Review') }}</option>
-                <option value="In Review">{{ __('In Review') }}</option>
                 <option value="Approved">{{ __('Approved') }}</option>
                 <option value="Denied">{{ __('Denied') }}</option>
             </select>

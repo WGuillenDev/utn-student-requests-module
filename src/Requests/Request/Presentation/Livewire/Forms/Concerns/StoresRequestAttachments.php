@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Src\Requests\Request\Presentation\Livewire\Forms\Concerns;
 
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Src\Requests\Request\Domain\ValueObjects\RequestAttachment;
 
@@ -17,9 +18,18 @@ use Src\Requests\Request\Domain\ValueObjects\RequestAttachment;
  */
 trait StoresRequestAttachments
 {
+    /**
+     * Names the stored copy explicitly (rather than $file->store(),
+     * which derives it from the temporary upload's own hash) so calling
+     * this twice for the same uploaded file — one Validation submission
+     * can create several Request rows sharing one pool of documents —
+     * produces distinct paths instead of colliding with the `files`
+     * table's (disk, path) unique constraint.
+     */
     private function storeAttachment(TemporaryUploadedFile $file, string $documentType): RequestAttachment
     {
-        $path = $file->store('requests', 'local');
+        $filename = Str::random(40).'.'.$file->getClientOriginalExtension();
+        $path = $file->storeAs('requests', $filename, 'local');
 
         return new RequestAttachment(
             documentType: $documentType,

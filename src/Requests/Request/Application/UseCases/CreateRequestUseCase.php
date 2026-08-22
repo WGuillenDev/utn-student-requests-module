@@ -50,6 +50,7 @@ final class CreateRequestUseCase
             type: $dto->type,
             courseId: $dto->courseId,
             requiredCourseId: $dto->requiredCourseId,
+            waiverJustification: $dto->waiverJustification,
             originInstitution: $dto->originInstitution,
             externalCourse: $dto->externalCourse,
             validationPrecedentId: $this->resolveValidationPrecedentId($dto),
