@@ -53,16 +53,15 @@ class RequestComponent extends Component
 
     public bool $showCreateModal = false;
 
-    public bool $showReviewModal = false;
-
     /**
      * Detail view — available for EVERY request regardless of status,
      * so Docencia can always look back at a closed request's full data
-     * and attached documents. For an open Validation request it is no
-     * longer strictly read-only: the "Cursos a convalidar" section
-     * embeds the Reconocer/No reconocer decision inline (via the same
-     * changeStatus() used by showReviewModal, see below) instead of
-     * requiring a trip to the separate review modal.
+     * and attached documents. This is now the ONLY modal for reviewing
+     * a request too: the status buttons, estimated date, comment, and
+     * document upload that used to live in a separate "Review request"
+     * modal were merged in here, gated by $viewingRequest['canReview']
+     * — a closed/unauthorized request just doesn't render those
+     * controls, rather than needing a second modal to reach them.
      */
     public bool $showViewModal = false;
 
@@ -94,21 +93,10 @@ class RequestComponent extends Component
 
     public $reviewDocumentFile = null;
 
-    /**
-     * The review modal's own read-only "Adjuntos" list — same shape as
-     * $viewingRequest['documents'], populated by openReviewModal() so
-     * Docencia can see what's already attached before deciding whether
-     * to add another document, without needing the separate detail
-     * modal open at the same time.
-     *
-     * @var array<int, array{id: int, documentType: string, originalName: string, sizeKb: int}>
-     */
-    public array $reviewingDocuments = [];
-
     public ?int $reviewingId = null;
 
     /**
-     * The request's type, seeded by openReviewModal() — the status
+     * The request's type, seeded by openViewModal() — the status
      * button row needs it to decide whether "Aprobada" gets its own
      * button. Course Validation requests reach Approved through
      * Reconocer in the "Cursos a convalidar" table instead, so the
@@ -123,14 +111,6 @@ class RequestComponent extends Component
     public string $reviewComment = '';
 
     public string $reviewEstimatedDate = '';
-
-    /**
-     * ES-02's precedent indicator: the reference resolution number of an
-     * approved catalog precedent linked to the request being reviewed.
-     * Null when the request has no linked precedent (waiver requests,
-     * or validations without an approved precedent match).
-     */
-    public ?string $reviewPrecedentResolution = null;
 
     public RequestForm $form;
 
@@ -215,10 +195,10 @@ class RequestComponent extends Component
      * resolution, attached documents) that don't belong on the Request
      * entity itself.
      *
-     * Also seeds $reviewingId/$reviewComment (normally openReviewModal's
-     * job) so the "Cursos a convalidar" table's inline Reconocer/No
-     * reconocer buttons have a valid target to call changeStatus()
-     * against without opening the separate review modal.
+     * Also seeds every "reviewXxx" property this modal's merged-in
+     * review controls need (status buttons, estimated date, comment,
+     * document upload) — there is no separate review modal anymore, so
+     * this is the single place all of that state gets initialized.
      */
     public function openViewModal(int $id, FindRequestUseCase $useCase): void
     {
@@ -260,19 +240,21 @@ class RequestComponent extends Component
             : '';
 
         $this->reviewingId = $id;
+        $this->reviewingType = $request->type();
         $this->reviewStatus = $request->status();
         $this->reviewComment = '';
+        $this->reviewEstimatedDate = $request->estimatedResolutionDate() ?? '';
+        $this->reviewDocumentType = '';
+        $this->reviewDocumentFile = null;
         $this->resetValidation();
 
         $this->showViewModal = true;
     }
 
     /**
-     * Shared by openViewModal()/openReviewModal()/uploadReviewDocument()
-     * — both modals now show the same attachment list (the review modal
-     * gained its own read-only "Adjuntos" section alongside the new
-     * upload form), so this stays a single query instead of two copies
-     * drifting apart.
+     * Shared by openViewModal()/uploadReviewDocument() so the
+     * attachment list is read from a single query instead of being
+     * duplicated.
      *
      * @return array<int, array{id: int, documentType: string, originalName: string, sizeKb: int}>
      */
@@ -490,40 +472,14 @@ class RequestComponent extends Component
         $this->viewingRequest = null;
     }
 
-    public function openReviewModal(int $id, FindRequestUseCase $useCase): void
-    {
-        $request = $useCase->handle($id);
-        $this->authorize('review', $request);
-
-        $this->reviewingId = $id;
-        $this->reviewingType = $request->type();
-        $this->reviewStatus = $request->status();
-        $this->reviewComment = '';
-        $this->reviewEstimatedDate = $request->estimatedResolutionDate() ?? '';
-        $this->reviewPrecedentResolution = $request->validationPrecedentId() !== null
-            ? ValidationPrecedentModel::query()->find($request->validationPrecedentId())?->resolution_number
-            : null;
-        $this->reviewDocumentType = '';
-        $this->reviewDocumentFile = null;
-        $this->reviewingDocuments = $this->documentsFor($id);
-        $this->resetValidation();
-        $this->showReviewModal = true;
-    }
-
-    public function closeReviewModal(): void
-    {
-        $this->showReviewModal = false;
-        $this->reviewPrecedentResolution = null;
-    }
-
     /**
      * $status lets the "Cursos a convalidar" table's Reconocer/No
-     * reconocer buttons drive this same method directly (with
-     * $reviewingId seeded by openViewModal()) instead of going through
-     * the separate review modal's status dropdown — Reconocer/No
-     * reconocer are just Approved/Denied under another name, per the
-     * team's decision to keep a single status field rather than add a
-     * distinct per-course resolution field.
+     * reconocer buttons drive this same method (with $reviewingId
+     * seeded by openViewModal()) as the merged-in "Cambiar estado a"
+     * button row — Reconocer/No reconocer are just Approved/Denied
+     * under another name, per the team's decision to keep a single
+     * status field rather than add a distinct per-course resolution
+     * field.
      */
     public function changeStatus(ChangeRequestStatusUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase, ?string $status = null): void
     {
@@ -554,13 +510,9 @@ class RequestComponent extends Component
             return;
         }
 
-        $this->showReviewModal = false;
         $this->refreshTable($this->freshRows($listUseCase));
         $this->dispatch('toast', variant: 'success', text: __('Request status updated.'));
-
-        if ($this->showViewModal) {
-            $this->openViewModal($this->reviewingId, $findUseCase);
-        }
+        $this->openViewModal($this->reviewingId, $findUseCase);
     }
 
     /**
@@ -587,17 +539,14 @@ class RequestComponent extends Component
 
         $this->refreshTable($this->freshRows($listUseCase));
         $this->dispatch('toast', variant: 'success', text: __('Estimated resolution date saved.'));
-
-        if ($this->showViewModal) {
-            $this->openViewModal($this->reviewingId, $findUseCase);
-        }
+        $this->openViewModal($this->reviewingId, $findUseCase);
     }
 
     /**
      * Docencia attaching its own document to a request — same storage
      * pipeline the student-facing forms use (StoresRequestAttachments,
      * RequestAttachmentRepositoryInterface::attach()), just triggered
-     * from the review modal instead of at creation time. Gated by the
+     * from the detail modal instead of at creation time. Gated by the
      * same 'review' ability as the rest of this modal rather than a new
      * permission string, since every role that can review a request is
      * exactly the role that should be able to attach supporting
@@ -624,12 +573,8 @@ class RequestComponent extends Component
 
         $this->reviewDocumentType = '';
         $this->reviewDocumentFile = null;
-        $this->reviewingDocuments = $this->documentsFor($this->reviewingId);
         $this->dispatch('toast', variant: 'success', text: __('Document uploaded.'));
-
-        if ($this->showViewModal) {
-            $this->openViewModal($this->reviewingId, $findUseCase);
-        }
+        $this->openViewModal($this->reviewingId, $findUseCase);
     }
 
     public function delete(int $id, DeleteRequestUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase): void

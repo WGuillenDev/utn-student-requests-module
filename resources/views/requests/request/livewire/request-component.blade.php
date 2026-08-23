@@ -67,11 +67,9 @@
             <div class="actions-cell">
                 <x-ui.row-actions
                     :can-view="Auth::user()->can('view', $request)"
-                    :can-edit="Auth::user()->can('review', $request) && ! $request->isFinal()"
                     :can-delete="Auth::user()->can('delete', $request)"
                     view-action="$wire.openViewModal({{ $request->id() }})"
                     view-label="{{ __('View details and documents') }}"
-                    edit-action="$wire.openReviewModal({{ $request->id() }})"
                     delete-id="{{ $request->id() }}" />
             </div>
         </div>
@@ -407,10 +405,54 @@
         </div>
         @endif
         @endif
-        <div class="form-field">
-            <label>{{ __('Estimated resolution date') }}</label>
-            <p>{{ $viewingRequest['estimatedResolutionDate'] ?? '—' }}</p>
+        @if ($viewingRequest['canReview'])
+        <div class="form-field" style="border-top:1px solid var(--border); padding-top:14px;">
+            <label>{{ __('New status') }}</label>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                {{--
+                    Course Validation reaches Approved via "Reconocer" in
+                    the "Cursos a convalidar" table above instead, so it
+                    doesn't get its own button here — Requirement Waiver
+                    has no such alternate path, so it keeps a 5th
+                    "Aprobada" button. Each button commits immediately
+                    (calls changeStatus() directly, same one-click
+                    pattern as Reconocer/No reconocer) instead of staging
+                    a value for a separate "Confirmar" — there's no
+                    modal footer here to hold that second step anymore.
+                --}}
+                @foreach (($reviewingType === 'Validation'
+                    ? ['Pending Review', 'Verified by Registro', 'In Review', 'Denied']
+                    : ['Pending Review', 'Verified by Registro', 'In Review', 'Approved', 'Denied']
+                ) as $statusValue)
+                <button type="button"
+                    class="btn {{ $reviewStatus === $statusValue ? 'btn-primary' : 'btn-secondary' }}"
+                    wire:click="changeStatus('{{ $statusValue }}')"
+                    wire:loading.attr="disabled"
+                    wire:target="changeStatus">{{ __($statusValue) }}</button>
+                @endforeach
+            </div>
         </div>
+        @endif
+        <div class="form-field">
+            <label for="reviewEstimatedDate">{{ __('Estimated resolution date') }}</label>
+            @if ($viewingRequest['canReview'])
+            <span style="opacity:.6; font-size:12.5px;">{{ __('optional — auto-assigned after 24h if left blank') }}</span>
+            <div style="display:flex; gap:10px; align-items:flex-start;">
+                <input type="date" id="reviewEstimatedDate" wire:model="reviewEstimatedDate" style="flex:1;" class="{{ $errors->has('reviewEstimatedDate') ? 'has-error' : '' }}">
+                <button type="button" class="btn btn-secondary" wire:click="saveEstimatedDate" wire:loading.attr="disabled" wire:target="saveEstimatedDate">{{ __('Save date') }}</button>
+            </div>
+            @error('reviewEstimatedDate') <span class="form-error">{{ $message }}</span> @enderror
+            @else
+            <p>{{ $viewingRequest['estimatedResolutionDate'] ?? '—' }}</p>
+            @endif
+        </div>
+        @if ($viewingRequest['canReview'])
+        <div class="form-field">
+            <label for="reviewComment">{{ __('Comment') }} <span style="opacity:.6;">({{ __('required to deny') }})</span></label>
+            <textarea id="reviewComment" wire:model="reviewComment" class="{{ $errors->has('reviewComment') ? 'has-error' : '' }}"></textarea>
+            @error('reviewComment') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        @endif
         <div class="form-field">
             <label>{{ __('Submitted') }}</label>
             <p>{{ $viewingRequest['submittedAt'] ?? '—' }}</p>
@@ -439,6 +481,45 @@
                     </div>
                 </div>
                 @endforeach
+            </div>
+            @endif
+            @if ($viewingRequest['canReview'])
+            <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:4px; display:flex; flex-direction:column; gap:10px;">
+                <div class="form-field">
+                    <label for="reviewDocumentType">{{ __('Document type') }}</label>
+                    <input type="text" id="reviewDocumentType" wire:model="reviewDocumentType" class="{{ $errors->has('reviewDocumentType') ? 'has-error' : '' }}">
+                    @error('reviewDocumentType') <span class="form-error">{{ $message }}</span> @enderror
+                </div>
+                <div class="form-field">
+                    <label for="reviewDocumentFile">{{ __('Attach a document') }} <span style="opacity:.6;">({{ __('PDF or image, max. 10MB') }})</span></label>
+                    @if ($reviewDocumentFile && ! $errors->has('reviewDocumentFile'))
+                        <div class="file-chip">
+                            <span class="file-chip-name">{{ $reviewDocumentFile->getClientOriginalName() }}</span>
+                            <button type="button" class="file-chip-remove" wire:click="$set('reviewDocumentFile', null)" aria-label="{{ __('Remove file') }}">&times;</button>
+                        </div>
+                    @else
+                        <div
+                            x-data="{ dragging: false }"
+                            x-on:dragover.prevent="dragging = true"
+                            x-on:dragleave.prevent="dragging = false"
+                            x-on:drop.prevent="
+                                dragging = false;
+                                $refs.reviewDocumentFile.files = $event.dataTransfer.files;
+                                $refs.reviewDocumentFile.dispatchEvent(new Event('change'));
+                            "
+                            :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                        >
+                            <input type="file" id="reviewDocumentFile" x-ref="reviewDocumentFile" wire:model="reviewDocumentFile" class="{{ $errors->has('reviewDocumentFile') ? 'has-error' : '' }}">
+                            <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                        </div>
+                    @endif
+                    @error('reviewDocumentFile')
+                        <span class="form-error">{{ $message }}</span>
+                    @elseif ($reviewDocumentFile)
+                        <span class="form-success">{{ __('File attached') }}</span>
+                    @enderror
+                    <button type="button" class="btn btn-secondary" style="width:fit-content;" wire:click="uploadReviewDocument" wire:loading.attr="disabled" wire:target="uploadReviewDocument,reviewDocumentFile">{{ __('Upload document') }}</button>
+                </div>
             </div>
             @endif
         </div>
@@ -549,116 +630,6 @@
             </div>
         </div>
         @endif
-    </x-ui.modal>
-
-    <x-ui.modal :show="$showReviewModal" :title="__('Review request')" close-action="closeReviewModal">
-        @if ($reviewPrecedentResolution !== null)
-        <div class="form-field">
-            <div class="status-badge positive" style="display:inline-flex;">
-                {{ __('Approved precedent found in the historical catalog') }} — {{ __('Reference resolution') }}: {{ $reviewPrecedentResolution }}
-            </div>
-        </div>
-        @endif
-        <div class="form-field">
-            <label>{{ __('New status') }}</label>
-            <div style="display:flex; flex-wrap:wrap; gap:8px;">
-                {{--
-                    Course Validation reaches Approved via "Reconocer" in
-                    the "Cursos a convalidar" table instead (see the view
-                    modal above), so it doesn't get its own button here —
-                    Requirement Waiver has no such alternate path, so it
-                    keeps a 5th "Aprobada" button.
-                --}}
-                @foreach (($reviewingType === 'Validation'
-                    ? ['Pending Review', 'Verified by Registro', 'In Review', 'Denied']
-                    : ['Pending Review', 'Verified by Registro', 'In Review', 'Approved', 'Denied']
-                ) as $statusValue)
-                <button type="button"
-                    class="btn {{ $reviewStatus === $statusValue ? 'btn-primary' : 'btn-secondary' }}"
-                    wire:click="$set('reviewStatus', '{{ $statusValue }}')">{{ __($statusValue) }}</button>
-                @endforeach
-            </div>
-        </div>
-        <div class="form-field">
-            <label for="reviewEstimatedDate">{{ __('Estimated resolution date') }} <span style="opacity:.6;">({{ __('optional — auto-assigned after 24h if left blank') }})</span></label>
-            <div style="display:flex; gap:10px; align-items:flex-start;">
-                <input type="date" id="reviewEstimatedDate" wire:model="reviewEstimatedDate" style="flex:1;" class="{{ $errors->has('reviewEstimatedDate') ? 'has-error' : '' }}">
-                <button type="button" class="btn btn-secondary" wire:click="saveEstimatedDate" wire:loading.attr="disabled" wire:target="saveEstimatedDate">{{ __('Save date') }}</button>
-            </div>
-            @error('reviewEstimatedDate') <span class="form-error">{{ $message }}</span> @enderror
-        </div>
-        <div class="form-field">
-            <label for="reviewComment">{{ __('Comment') }} <span style="opacity:.6;">({{ __('required to deny') }})</span></label>
-            <textarea id="reviewComment" wire:model="reviewComment" class="{{ $errors->has('reviewComment') ? 'has-error' : '' }}"></textarea>
-            @error('reviewComment') <span class="form-error">{{ $message }}</span> @enderror
-        </div>
-        <div class="form-field" style="border-top:1px solid var(--border); padding-top:14px;">
-            <label>{{ __('Attached documents') }}</label>
-            @if (count($reviewingDocuments) === 0)
-            <p style="opacity:.6;">{{ __('No documents attached') }}</p>
-            @else
-            <div style="display:flex; flex-direction:column; gap:10px;">
-                @foreach ($reviewingDocuments as $document)
-                <div class="file-chip" style="flex-direction:column; align-items:stretch; gap:8px;">
-                    <span class="file-chip-name">{{ $document['originalName'] }} ({{ $document['sizeKb'] }} KB)</span>
-                    <div style="display:flex; gap:8px;">
-                        <a href="{{ route('requests.request.attachment-preview', ['fileId' => $document['id']]) }}"
-                           target="_blank"
-                           class="btn btn-secondary"
-                           style="text-decoration:none; flex:1; justify-content:center;">
-                            {{ __('Preview') }}
-                        </a>
-                        <a href="{{ route('requests.request.attachment-download', ['fileId' => $document['id']]) }}"
-                           class="btn btn-primary"
-                           style="text-decoration:none; flex:1; justify-content:center;">
-                            {{ __('Download') }}
-                        </a>
-                    </div>
-                </div>
-                @endforeach
-            </div>
-            @endif
-        </div>
-        <div class="form-field">
-            <label for="reviewDocumentType">{{ __('Document type') }}</label>
-            <input type="text" id="reviewDocumentType" wire:model="reviewDocumentType" class="{{ $errors->has('reviewDocumentType') ? 'has-error' : '' }}">
-            @error('reviewDocumentType') <span class="form-error">{{ $message }}</span> @enderror
-        </div>
-        <div class="form-field">
-            <label for="reviewDocumentFile">{{ __('Attach a document') }} <span style="opacity:.6;">({{ __('PDF or image, max. 10MB') }})</span></label>
-            @if ($reviewDocumentFile && ! $errors->has('reviewDocumentFile'))
-                <div class="file-chip">
-                    <span class="file-chip-name">{{ $reviewDocumentFile->getClientOriginalName() }}</span>
-                    <button type="button" class="file-chip-remove" wire:click="$set('reviewDocumentFile', null)" aria-label="{{ __('Remove file') }}">&times;</button>
-                </div>
-            @else
-                <div
-                    x-data="{ dragging: false }"
-                    x-on:dragover.prevent="dragging = true"
-                    x-on:dragleave.prevent="dragging = false"
-                    x-on:drop.prevent="
-                        dragging = false;
-                        $refs.reviewDocumentFile.files = $event.dataTransfer.files;
-                        $refs.reviewDocumentFile.dispatchEvent(new Event('change'));
-                    "
-                    :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
-                >
-                    <input type="file" id="reviewDocumentFile" x-ref="reviewDocumentFile" wire:model="reviewDocumentFile" class="{{ $errors->has('reviewDocumentFile') ? 'has-error' : '' }}">
-                    <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
-                </div>
-            @endif
-            @error('reviewDocumentFile')
-                <span class="form-error">{{ $message }}</span>
-            @elseif ($reviewDocumentFile)
-                <span class="form-success">{{ __('File attached') }}</span>
-            @enderror
-            <button type="button" class="btn btn-secondary" style="width:fit-content;" wire:click="uploadReviewDocument" wire:loading.attr="disabled" wire:target="uploadReviewDocument,reviewDocumentFile">{{ __('Upload document') }}</button>
-        </div>
-
-        <x-slot:footer>
-            <button type="button" class="btn btn-secondary" wire:click="closeReviewModal">{{ __('Cancel') }}</button>
-            <button type="button" class="btn btn-primary" wire:click="changeStatus">{{ __('Confirm') }}</button>
-        </x-slot:footer>
     </x-ui.modal>
 
     <x-ui.confirm-delete-modal :success-text="__('The request has been deleted.')" />

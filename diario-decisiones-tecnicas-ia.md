@@ -1022,3 +1022,36 @@ No se quitó "Aprobada" de forma universal como mostraba la referencia al pie de
 Una instrucción de "hacer que coincida con la referencia" no siempre puede aplicarse literalmente si la referencia solo muestra un caso (aquí, una solicitud de Convalidación) y el sistema real tiene más de un flujo (Convalidación y Dispensa de requisito) compartiendo la misma pantalla. Antes de aplicar un cambio visual que quita una opción, vale la pena verificar si esa opción es la única vía funcional para algún caso de uso, en vez de asumir que "menos botones" es simplemente una mejora visual sin costo.
 
 ---
+
+## Entrada — 22 de agosto de 2026 (continuación 7)
+**Tema:** Fusionar el modal "Review request" dentro de "Request detail" — un solo modal en vez de dos
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Tras varias rondas de ajustes al modal de revisión, el equipo — ya probando la aplicación en su propio entorno — mostró una captura del modal "Request detail" preguntando por qué no veía ciertos botones. Ante la pregunta de la IA para precisar cuáles, el equipo definió directamente lo que quería en vez de seguir aclarando el malentendido puntual: "ya sé qué quiero hacer, fusiona ambos y que funcionen como uno mismo, entonces agrega lo que hay en edit al view" — unificar el modal "Review request" (botones de estado, fecha estimada, comentario, subida de documentos) dentro de "Request detail", eliminando el segundo modal.
+
+### 2. Qué encontró la IA antes de actuar
+
+Al planear la fusión, notó que el diseño anterior tenía un flujo de dos pasos para cambiar de estado: el botón de cada estado solo fijaba la propiedad `reviewStatus`; un botón "Confirmar" en el pie del modal de revisión, separado, era el que realmente llamaba a `changeStatus()`. El modal fusionado no conservaría ese pie de "Confirmar" propio — si se copiaba el markup del selector de estado tal cual, los botones habrían quedado sin ningún efecto real (fijarían la propiedad pero nunca la aplicarían).
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+Que cada botón de estado llame directamente a `changeStatus('X')` al hacer clic, aplicando el cambio de inmediato — el mismo patrón de un solo clic que ya usan Reconocer/No reconocer en la misma pantalla, en vez de mantener un paso de confirmación separado que ya no tenía dónde vivir. Se eliminaron `showReviewModal`, `openReviewModal()`, `closeReviewModal()`, `reviewPrecedentResolution` y `reviewingDocuments` (todo duplicado o redundante tras la fusión), y `openViewModal()` pasó a ser el único lugar que inicializa el estado de revisión (estado, fecha, comentario, tipo/archivo de documento). Se quitó también el ícono de lápiz ("Editar") de la bandeja, dejando solo el de "Ver detalle y documentos" como única acción de entrada.
+
+### 4. Qué se rechazó y por qué
+
+No se intentó preservar un paso de "Confirmar" independiente (por ejemplo, agregando un botón fijo al final del modal fusionado) — se prefirió consistencia total con el patrón de un solo clic que Reconocer/No reconocer ya habían establecido en la misma pantalla, evitando que convivieran dos formas distintas de aplicar un cambio de estado en un mismo modal.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+`php -l`, y conteo de balance de directivas Blade tras la fusión (`@if`/`@endif`: 22/22, `@foreach`/`@endforeach`: 8/8, `@error`/`@enderror`: 14/14, `@php`/`@endphp`: 2/2) — sin poder confirmar visualmente en el navegador que el flujo completo (clic en un botón de estado, guardar fecha, subir documento) funciona correctamente de punta a punta en este entorno.
+
+### 6. Qué se aprendió del proceso
+
+Al fusionar dos pantallas que antes tenían flujos de interacción distintos (una de dos pasos con confirmación aparte, otra de un clic), hay que revisar explícitamente si alguna de las dos piezas dependía de una estructura que la fusión elimina (aquí, el botón "Confirmar" del pie del modal que desaparece) — copiar el markup sin ese análisis habría dejado un control visualmente presente pero funcionalmente muerto. Cuando el equipo interrumpe una pregunta de aclaración con una decisión ya tomada ("ya sé qué quiero hacer"), conviene ejecutar esa decisión directamente en vez de insistir en resolver primero la ambigüedad original, que quedó superada por la nueva instrucción.
+
+---
