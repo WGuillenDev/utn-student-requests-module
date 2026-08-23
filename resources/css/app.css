@@ -915,6 +915,9 @@ select:focus[data-flux-control] {
     flex-direction: column;
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
   }
+  .modal.lg {
+    max-width: 820px;
+  }
   .modal-head {
     display: flex;
     align-items: center;
@@ -1439,7 +1442,8 @@ select:focus[data-flux-control] {
     .pagination {
       justify-content: center;
     }
-    .modal {
+    .modal,
+    .modal.lg {
       max-width: 100%;
       max-height: 100vh;
       border-radius: 0;

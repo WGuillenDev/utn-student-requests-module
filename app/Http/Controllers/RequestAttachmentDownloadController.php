@@ -41,6 +41,7 @@ final class RequestAttachmentDownloadController extends Controller
             type: $requestModel->type,
             courseId: $requestModel->course_id,
             requiredCourseId: $requestModel->required_course_id,
+            waiverJustification: $requestModel->waiver_justification,
             originInstitution: $requestModel->origin_institution,
             externalCourse: $requestModel->external_course,
             validationPrecedentId: $requestModel->validation_precedent_id,

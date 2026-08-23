@@ -797,3 +797,96 @@ Se pidió agregar, en las acciones de la bandeja de solicitudes de Docencia, una
 - Sin un entorno ejecutable, la verificación de un cambio de UI queda necesariamente incompleta (sintaxis sí, comportamiento real no) — es preferible decirlo con claridad en vez de dar a entender que el cambio fue probado igual que en sesiones con navegador disponible.
 
 ---
+
+## Entrada — 22 de agosto de 2026 (continuación)
+**Tema:** Encabezado del modal de detalle reorganizado + nueva sección "Cursos a convalidar" con Reconocer/No reconocer por curso
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, sin entorno local levantado en esta sesión
+
+---
+
+### 1. Qué se le consultó a la IA
+
+A partir de una referencia visual (mockup) compartida por el equipo, se pidieron dos cambios sobre el modal "Detalle de la solicitud" de Docencia:
+1. Mover el badge de estado (hoy al final del modal, sección "Estado") a la cabecera, junto al título, y reordenar el cuerpo para que curso UTN + curso externo + universidad de procedencia aparezcan primero.
+2. Agregar una sección "Cursos a convalidar" (solo para tipo Convalidación) con columnas Curso UTN/curso externo/universidad/código/créditos/resolución, un botón "Guardar datos externos", un campo de razón obligatorio solo para "No reconocer", y botones "Reconocer"/"No reconocer" por curso.
+
+El equipo señaló explícitamente, en su propio mensaje, que el punto 2 implicaba una decisión de modelo de dominio (¿sigue siendo 1 solicitud = 1 curso, o hace falta una entidad nueva tipo `RequestCourseLine` para agrupar varios cursos por solicitud?) que debía definirse antes de tocar código, no asumirse.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. `<x-ui.modal>` es compartido por 6 pantallas distintas (Roles, Permisos, Precedentes, Reglas de Levantamiento, Crear solicitud, este modal), sin ningún slot para contenido extra en la cabecera — cualquier cambio ahí debía ser opt-in.
+2. El dominio `Request` sigue siendo 1 solicitud = 1 curso externo, sin concepto de "envío"/lote que agrupe varias solicitudes creadas juntas.
+3. Revisando el propio diario, la IA encontró que el 21 de agosto el equipo ya había decidido explícitamente **no** crear un agregado de dominio compartido ("Resolución") para agrupar los cursos de una misma convalidación — cada curso genera su propia `Request` independiente. Dos de las tres opciones que el propio equipo planteaba en su mensaje (agrupar Requests hermanas, o crear `RequestCourseLine`) reabrían esa decisión ya cerrada. En vez de elegir una por su cuenta o ignorar el precedente, la IA presentó las tres opciones al equipo citando explícitamente esa decisión previa como contexto.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+El equipo escogió, ante las preguntas planteadas: (a) "1 fila = la propia Request" — sin cambio de dominio — y (b) "el resultado por curso es el mismo status que ya existe en Request". Con esas dos decisiones, se aceptó:
+- Un slot opcional `titleExtra` en `<x-ui.modal>`, sin modificar el comportamiento de los otros 5 usos del componente.
+- El reordenamiento del cuerpo (solo para Convalidación): curso UTN, curso externo, universidad, y luego estudiante/tipo.
+- Dos columnas nuevas y nullable en `requests` (`external_course_code`, `external_course_credits`) vía migración puramente aditiva, y un `SaveExternalCourseDataUseCase` separado de `ChangeRequestStatusUseCase` — para que "guardar datos externos" nunca escriba una fila de cambio de estado ni dispare notificaciones.
+- Reutilizar `changeStatus()` (con un parámetro `$status` opcional) para que los botones "Reconocer"/"No reconocer" disparen exactamente el mismo flujo que ya usaba el modal de revisión clásico: mismo comentario obligatorio al denegar, mismo historial, mismo correo de notificación.
+
+### 4. Qué se rechazó y por qué
+
+- No se creó ninguna entidad de dominio nueva ni un campo de resultado separado del `status` existente — ambas alternativas fueron descartadas por el propio equipo al responder las preguntas, en línea con la decisión arquitectónica ya tomada la sesión anterior.
+- No se reutilizó la traducción existente `Approved` → "Aprobada" (femenino, concuerda con "solicitud") para el badge de "Resolución" de un curso — se prefirió agregar etiquetas dedicadas "Reconocido"/"No reconocido" en vez de forzar una concordancia de género incorrecta ("Aprobada" no concuerda con "curso").
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- Sin `vendor/` ni `.env` en este entorno, la IA no pudo levantar la aplicación ni probar el cambio en el navegador. Se limitó a validaciones estáticas: `php -l` sobre los 6 archivos PHP tocados, `json_decode` sobre `lang/es.json`, y conteo manual de directivas Blade (`@if`/`@endif`/`@foreach`/`@endforeach`) para confirmar que quedaran balanceadas, a falta de un linter de Blade disponible.
+- Quedó pendiente que el equipo corra `php artisan migrate` y pruebe el flujo completo (guardar datos externos, reconocer, no reconocer sin razón para confirmar que bloquea) con la cuenta de Docencia antes de dar el cambio por cerrado.
+
+### 6. Qué se aprendió del proceso
+
+- Cuando una instrucción nueva del equipo choca con una decisión arquitectónica ya tomada y documentada en una sesión anterior, vale la pena citarla explícitamente al presentar las opciones — así el equipo decide con memoria completa del proyecto, en vez de reabrir sin saberlo una discusión que ya se había cerrado.
+- Reutilizar el mismo método de cambio de estado (parametrizándolo) para dos puntos de entrada de UI distintos — el modal de revisión clásico y los botones inline de la nueva tabla de cursos — evita mantener dos caminos paralelos hacia el mismo efecto de dominio, con el riesgo de que diverjan con el tiempo.
+
+---
+
+## Entrada — 22 de agosto de 2026 (continuación 2)
+**Tema:** Expediente del estudiante ampliado, dos estados de revisión intermedios de vuelta al enum, y subida de documentos desde Docencia
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, sin entorno local levantado en esta sesión
+
+---
+
+### 1. Qué se le consultó a la IA
+
+A partir de una segunda referencia visual, el equipo pidió en un mismo mensaje:
+1. Ampliar la sección "Expediente del estudiante" (hoy una tabla simple de Curso/Período/Estado/Nota) con datos de identificación (nombre completo, cédula/carné, correo institucional, badge de matrícula activa/inactiva), datos de carrera (carrera actual, cuatrimestre, plan de estudios), un resumen estadístico (Aprobadas/Reprobadas/Acreditadas/Promedio/Créditos) y una tabla ampliada (agregando "Cuatrimestre del Plan" y "Cursado en"), todo dentro de un encabezado colapsable con contador y chevron.
+2. Rediseñar el modal de revisión: la fecha estimada pasa a tener su propio botón "Guardar fecha", el estado deja de ser un `<select>` y pasa a ser botones (incluyendo un estado nuevo, "Verificada por Registro", y el regreso de "En revisión" — eliminado la sesión anterior por redundante), los documentos adjuntos cambian a un formato de dos líneas, y se agrega la posibilidad de subir un documento nuevo desde Docencia.
+
+El equipo marcó explícitamente que el estado nuevo y la subida de documentos eran cambios de dominio/infraestructura ("no solo de vista"), no una simple maquetación.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Para el expediente: `StudentModel`/`User` ya tenían cédula, correo y matrícula disponibles; `LevelModel::courses()` (mismo pivote `course_level` que ya usa `CourseModel::levels()`) permitía resolver "Cuatrimestre del Plan" sin ninguna consulta nueva a la base de datos, tal como el propio equipo había sugerido revisar.
+2. Para el flujo de estados: la IA detectó una tensión directa con una decisión ya tomada — "En revisión" se había eliminado explícitamente el 21 de agosto por ser redundante con "Pendiente de revisión", y ahora se pedía de vuelta junto con un estado adicional. Además, el mockup de referencia no mostraba un botón "Aprobada", lo que el propio equipo interpretó como una posible señal de que ese estado debía calcularse automáticamente cuando todos los cursos de la tabla del cambio anterior quedaran "Reconocidos" — algo que dependía directamente de cómo había quedado resuelto el punto 2 de la entrada anterior (1 Request = 1 curso).
+3. En vez de asumir una de las alternativas o implementar la subida de documentos sin confirmar alcance, la IA presentó ambas decisiones como preguntas explícitas al equipo antes de tocar el dominio.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+El equipo decidió (a) agregar los dos estados nuevos sin cálculo automático — "Aprobada" se mantiene manual — y (b) sí implementar la subida de documentos. Con eso, se aceptó:
+- La extensión de `studentRecord()` con identificación, carrera/plan y un resumen agregado (conteos por status + promedio ponderado por créditos + créditos ganados/totales del plan, calculado en PHP a partir de datos ya cargados, sin tocar la base de datos), colapsada con Alpine (`x-data`/`x-show`) reutilizando la clase `.chevron-toggle` que ya existía para el menú lateral.
+- Una migración puramente aditiva para los estados `In Review` y `Verified by Registro` (sin remapeo de datos, a diferencia de la migración que los había reducido la sesión anterior).
+- Convertir el `<select>` de estado en 5 botones — los 4 del mockup más "Aprobada" — para no dejar sin forma manual de aprobar a las solicitudes de tipo Dispensa de requisito, que no pasan por la tabla de Reconocer/No reconocer del cambio anterior.
+- Separar "Guardar fecha" en su propia acción (`AssignEstimatedResolutionDateUseCase`), para no ensuciar el historial de la solicitud con una fila de "cambio de estado" falsa cuando solo se corrige la fecha.
+- La subida de documentos desde Docencia, reutilizando el mismo trait (`StoresRequestAttachments`) y el mismo repositorio (`RequestAttachmentRepositoryInterface`) que ya usan los formularios del estudiante, en vez de construir un mecanismo de almacenamiento paralelo.
+
+### 4. Qué se rechazó y por qué
+
+- No se creó el permiso nuevo (`requests.upload_document`) que el propio equipo sugirió como posible requisito para la subida de documentos — se reutilizó la habilidad `review` ya existente, razonando que cualquier rol autorizado a revisar una solicitud es exactamente el rol que debería poder adjuntarle documentos. Crear un permiso nuevo habría requerido cambios de seeder que la IA no podía verificar en este entorno sin base de datos disponible.
+- No se quitó el botón "Aprobada" del selector de estado pese a que el mockup de referencia no lo mostraba — se dejó explícitamente para no romper el único camino manual de aprobación de Dispensa de requisito.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- Mismas limitaciones que la entrada anterior: sin `vendor/`/`.env`, solo se pudo validar con `php -l` sobre los archivos PHP tocados y `json_decode` sobre las traducciones nuevas agregadas a `lang/es.json`.
+- Se recontó a mano el balance de directivas Blade después de este cambio (`@if`/`@endif`: 17/17, `@foreach`/`@endforeach`: 7/7, `@error`/`@enderror`: 14/14) antes de darlo por completo, a falta de un linter de Blade en este entorno.
+
+### 6. Qué se aprendió del proceso
+
+- Cuando una decisión nueva reabre una decisión ya cerrada en una sesión anterior (aquí, resucitar "En revisión"), conviene señalarlo explícitamente como una tensión real con el historial del proyecto, en vez de implementarlo en silencio como si fuera la primera vez que se discute — el equipo necesita saber que está revirtiendo algo, no solo agregando algo nuevo.
+- Un mockup de referencia no siempre cubre todos los flujos existentes: en este caso, el mockup solo mostraba el camino de Convalidación (con su tabla de cursos y Reconocer/No reconocer), sin considerar que Dispensa de requisito no tiene ese mecanismo alterno para llegar a "Aprobada". Antes de calcar un diseño de referencia al pie de la letra, vale la pena verificar que ningún camino funcional existente quede sin reemplazo.
+
+---

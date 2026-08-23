@@ -265,7 +265,7 @@
     {{-- Review modal (the real "edit" of this CRUD: change status, not fields) --}}
     {{-- Read-only detail — available for every request regardless of
          status, so closed requests remain reviewable after the fact. --}}
-    <x-ui.modal :show="$showViewModal" :title="__('Request detail')" close-action="closeViewModal">
+    <x-ui.modal :show="$showViewModal" :title="__('Request detail')" close-action="closeViewModal" size="lg">
         @if ($viewingRequest)
         <x-slot:titleExtra>
             <span class="status-badge {{ match(true) {
@@ -464,35 +464,31 @@
                 @if (count($viewingRequest['studentRecord']['courses']) === 0)
                 <p style="opacity:.6;">{{ __('No academic record found') }}</p>
                 @else
-                <div style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;">
-                    <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
-                        <thead>
-                            <tr style="text-align:left;">
-                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Course') }}</th>
-                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Plan term') }}</th>
-                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Taken in') }}</th>
-                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Status') }}</th>
-                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Grade') }}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($viewingRequest['studentRecord']['courses'] as $course)
-                            <tr style="border-top:1px solid var(--border);">
-                                <td style="padding:8px 10px;">{{ $course['course'] }}</td>
-                                <td style="padding:8px 10px;">{{ $course['planLevel'] ?? '—' }}</td>
-                                <td style="padding:8px 10px;">{{ $course['period'] }}</td>
-                                <td style="padding:8px 10px;">
-                                    <span class="status-badge {{ match(true) {
-                                            in_array($course['status'], ['Approved', 'Credited by Equivalence', 'Credited by Validation', 'Requirement Waived'], true) => 'positive',
-                                            $course['status'] === 'Failed' => 'negative',
-                                            default => '',
-                                        } }}">{{ __($course['status']) }}</span>
-                                </td>
-                                <td style="padding:8px 10px;">{{ $course['grade'] ?? '—' }}</td>
-                            </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                <div style="max-height:260px; overflow-y:auto; overflow-x:auto; border:1px solid var(--border); border-radius:10px;">
+                    <div style="min-width:560px;">
+                        <div class="data-row" role="row" style="--table-cols: 3fr 0.9fr 0.9fr 1fr 0.7fr; font-size:12.5px;">
+                            <span>{{ __('Course') }}</span>
+                            <span>{{ __('Plan term') }}</span>
+                            <span>{{ __('Taken in') }}</span>
+                            <span>{{ __('Status') }}</span>
+                            <span>{{ __('Grade') }}</span>
+                        </div>
+                        @foreach ($viewingRequest['studentRecord']['courses'] as $course)
+                        <div class="data-row" role="row" style="--table-cols: 3fr 0.9fr 0.9fr 1fr 0.7fr;">
+                            <span>{{ $course['course'] }}</span>
+                            <span>{{ $course['planLevel'] ?? '—' }}</span>
+                            <span>{{ $course['period'] }}</span>
+                            <span>
+                                <span class="status-badge {{ match(true) {
+                                        in_array($course['status'], ['Approved', 'Credited by Equivalence', 'Credited by Validation', 'Requirement Waived'], true) => 'positive',
+                                        $course['status'] === 'Failed' => 'negative',
+                                        default => '',
+                                    } }}">{{ __($course['status']) }}</span>
+                            </span>
+                            <span>{{ $course['grade'] ?? '—' }}</span>
+                        </div>
+                        @endforeach
+                    </div>
                 </div>
                 @endif
             </div>

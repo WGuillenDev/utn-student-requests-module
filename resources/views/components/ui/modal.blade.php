@@ -2,6 +2,7 @@
 'show' => false,
 'title' => '',
 'closeAction' => 'closeModal',
+'size' => 'default',
 ])
 
 {{--
@@ -12,7 +13,7 @@
     the approved design so every future modal looks identical.
 --}}
 <div class="modal-backdrop {{ $show ? 'open' : '' }}">
-    <div class="modal">
+    <div class="modal {{ $size === 'lg' ? 'lg' : '' }}">
         <div class="modal-head">
             <div style="display:flex; align-items:center; gap:10px;">
                 <span class="modal-title">{{ $title }}</span>
