@@ -150,6 +150,8 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
 
             $statusMatches = collect([
                 'Pending Review' => __('Pending Review'),
+                'In Review' => __('In Review'),
+                'Verified by Registro' => __('Verified by Registro'),
                 'Approved' => __('Approved'),
                 'Denied' => __('Denied'),
             ])->filter(fn (string $label): bool => stripos($label, $search) !== false)->keys()->all();

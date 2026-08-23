@@ -19,14 +19,17 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Livewire\Component;
 use Livewire\WithFileUploads;
+use Src\Requests\Request\Application\UseCases\AssignEstimatedResolutionDateUseCase;
 use Src\Requests\Request\Application\UseCases\ChangeRequestStatusUseCase;
 use Src\Requests\Request\Application\UseCases\CreateRequestUseCase;
 use Src\Requests\Request\Application\UseCases\DeleteRequestUseCase;
 use Src\Requests\Request\Application\UseCases\FindRequestUseCase;
 use Src\Requests\Request\Application\UseCases\ListRequestsUseCase;
 use Src\Requests\Request\Application\UseCases\SaveExternalCourseDataUseCase;
+use Src\Requests\Request\Domain\Contracts\RequestAttachmentRepositoryInterface;
 use Src\Requests\Request\Domain\Entities\Request;
 use Src\Requests\Request\Domain\Exceptions\InvalidStatusTransitionException;
+use Src\Requests\Request\Presentation\Livewire\Forms\Concerns\StoresRequestAttachments;
 use Src\Requests\Request\Presentation\Livewire\Forms\RequestForm;
 use Src\Shared\Export\Contracts\ExcelExporterInterface;
 use Src\Shared\Export\Contracts\PdfExporterInterface;
@@ -37,6 +40,7 @@ class RequestComponent extends Component
     use AuthorizesRequests;
     use InteractsWithDataTable;
     use InteractsWithExports;
+    use StoresRequestAttachments;
     use WithFileUploads;
 
     /**
@@ -75,6 +79,19 @@ class RequestComponent extends Component
     public string $viewingExternalCourseCode = '';
 
     public string $viewingExternalCourseCredits = '';
+
+    /**
+     * The review modal's "Tipo de documento" + file picker — Docencia
+     * attaching its own supporting document to a request, on top of
+     * whatever the student already submitted. Free text rather than
+     * one of the 4 fixed student-form document types (support_document/
+     * external_program/grade_certification/institution_proof): Docencia
+     * may need to attach things those categories don't cover (e.g. a
+     * signed resolution or a Registro memo).
+     */
+    public string $reviewDocumentType = '';
+
+    public $reviewDocumentFile = null;
 
     public ?int $reviewingId = null;
 
@@ -263,37 +280,140 @@ class RequestComponent extends Component
     }
 
     /**
-     * Docencia's "expediente del estudiante": the study plan(s) the
-     * student is enrolled in (with their current level) plus the full
-     * academic record history — the same academic_records rows the
-     * WaiverEngine reads via StudentAcademicProfileRepositoryInterface,
-     * surfaced here read-only so a reviewer can see the record behind
-     * an engine result without leaving the request detail modal.
+     * Courses whose academic_records status still counts as completed
+     * progress toward the plan — same set as
+     * EloquentStudentAcademicProfileRepository::PROGRESS_STATUSES,
+     * duplicated here (Presentation has no business reading a
+     * Domain-adjacent Infrastructure class's private constant) rather
+     * than shared, since it's a two-line list unlikely to drift.
      *
-     * @return array{studyPlans: array<int, array{name: string, currentLevel: int}>, courses: array<int, array{course: string, status: string, grade: string|null, period: string}>}
+     * @var array<int, string>
+     */
+    private const PROGRESS_STATUSES = ['Approved', 'Credited by Equivalence', 'Credited by Validation', 'Requirement Waived'];
+
+    /**
+     * @var array<int, string>
+     */
+    private const CREDITED_STATUSES = ['Credited by Equivalence', 'Credited by Validation', 'Requirement Waived'];
+
+    /**
+     * Docencia's "expediente del estudiante": identification, current
+     * career/plan, an aggregate summary (approved/failed/credited
+     * counts, weighted average grade, earned/total plan credits), and
+     * the full per-course academic record — the same academic_records
+     * rows the WaiverEngine reads via
+     * StudentAcademicProfileRepositoryInterface, surfaced here
+     * read-only so a reviewer can see the record behind an engine
+     * result without leaving the request detail modal.
+     *
+     * @return array{
+     *     fullName: string, nationalId: string, email: ?string, active: bool,
+     *     studyPlans: array<int, array{career: ?string, currentLevel: int, planLabel: string}>,
+     *     courses: array<int, array{course: string, status: string, grade: string|null, period: string, planLevel: int|null}>,
+     *     summary: array{approved: int, failed: int, credited: int, averageGrade: float|null, earnedCredits: int, totalCredits: int},
+     * }
      */
     private function studentRecord(int $studentId): array
     {
         $student = StudentModel::query()
             ->whereKey($studentId)
-            ->with(['studyPlans', 'academicRecords.course', 'academicRecords.academicPeriod'])
+            ->with([
+                'user',
+                'studyPlans.career',
+                'studyPlans.levels.courses',
+                'academicRecords.course',
+                'academicRecords.academicPeriod',
+            ])
             ->first();
 
+        if ($student === null) {
+            return [
+                'fullName' => '', 'nationalId' => '', 'email' => null, 'active' => false,
+                'studyPlans' => [], 'courses' => [],
+                'summary' => ['approved' => 0, 'failed' => 0, 'credited' => 0, 'averageGrade' => null, 'earnedCredits' => 0, 'totalCredits' => 0],
+            ];
+        }
+
+        // courseId -> plan level number + credits, resolved through the
+        // student's own study plan(s) (course_level, via LevelModel::courses()).
+        // A course could in principle sit in more than one plan; the last
+        // one wins, which is harmless while students only carry one plan.
+        $courseLevelInfo = [];
+        $totalPlanCredits = 0;
+
+        foreach ($student->studyPlans as $plan) {
+            foreach ($plan->levels as $level) {
+                foreach ($level->courses as $course) {
+                    $credits = (int) $course->pivot->credits;
+                    $totalPlanCredits += $credits;
+                    $courseLevelInfo[$course->id] = ['levelNumber' => $level->number, 'credits' => $credits];
+                }
+            }
+        }
+
+        $approvedCount = 0;
+        $failedCount = 0;
+        $creditedCount = 0;
+        $earnedCredits = 0;
+        $gradeSum = 0.0;
+        $gradeWeight = 0;
+
+        $courses = $student->academicRecords->map(function (AcademicRecordModel $record) use (
+            &$approvedCount, &$failedCount, &$creditedCount, &$earnedCredits, &$gradeSum, &$gradeWeight, $courseLevelInfo
+        ) {
+            $info = $courseLevelInfo[$record->course_id] ?? null;
+
+            match (true) {
+                $record->status === 'Approved' => $approvedCount++,
+                $record->status === 'Failed' => $failedCount++,
+                in_array($record->status, self::CREDITED_STATUSES, true) => $creditedCount++,
+                default => null,
+            };
+
+            if (in_array($record->status, self::PROGRESS_STATUSES, true) && $info !== null) {
+                $earnedCredits += $info['credits'];
+            }
+
+            if ($record->grade !== null) {
+                // Weighted by plan credits when resolvable; a course
+                // outside the student's own plan (e.g. an elective from
+                // another plan) still counts, just unweighted (weight 1),
+                // rather than being silently dropped from the average.
+                $weight = $info['credits'] ?? 1;
+                $gradeSum += (float) $record->grade * $weight;
+                $gradeWeight += $weight;
+            }
+
+            return [
+                'course' => $record->course !== null ? "{$record->course->code} — {$record->course->name}" : (string) $record->course_id,
+                'status' => $record->status,
+                'grade' => $record->grade !== null ? (string) $record->grade : null,
+                'period' => $record->academicPeriod !== null ? "{$record->academicPeriod->term} {$record->academicPeriod->year}" : '—',
+                'planLevel' => $info['levelNumber'] ?? null,
+            ];
+        })->all();
+
         return [
-            'studyPlans' => $student?->studyPlans
+            'fullName' => implode(' ', array_filter([$student->name, $student->last_name, $student->second_last_name])),
+            'nationalId' => $student->national_id,
+            'email' => $student->user?->email,
+            'active' => $student->active,
+            'studyPlans' => $student->studyPlans
                 ->map(fn ($plan) => [
-                    'name' => $plan->name,
+                    'career' => $plan->career?->name,
                     'currentLevel' => $plan->pivot->current_level,
+                    'planLabel' => trim("{$plan->name} {$plan->implementation_year}"),
                 ])
-                ->all() ?? [],
-            'courses' => $student?->academicRecords
-                ->map(fn (AcademicRecordModel $record) => [
-                    'course' => $record->course !== null ? "{$record->course->code} — {$record->course->name}" : (string) $record->course_id,
-                    'status' => $record->status,
-                    'grade' => $record->grade !== null ? (string) $record->grade : null,
-                    'period' => $record->academicPeriod !== null ? "{$record->academicPeriod->term} {$record->academicPeriod->year}" : '—',
-                ])
-                ->all() ?? [],
+                ->all(),
+            'courses' => $courses,
+            'summary' => [
+                'approved' => $approvedCount,
+                'failed' => $failedCount,
+                'credited' => $creditedCount,
+                'averageGrade' => $gradeWeight > 0 ? round($gradeSum / $gradeWeight, 2) : null,
+                'earnedCredits' => $earnedCredits,
+                'totalCredits' => $totalPlanCredits,
+            ],
         ];
     }
 
@@ -315,6 +435,8 @@ class RequestComponent extends Component
         $this->reviewPrecedentResolution = $request->validationPrecedentId() !== null
             ? ValidationPrecedentModel::query()->find($request->validationPrecedentId())?->resolution_number
             : null;
+        $this->reviewDocumentType = '';
+        $this->reviewDocumentFile = null;
         $this->resetValidation();
         $this->showReviewModal = true;
     }
@@ -366,6 +488,68 @@ class RequestComponent extends Component
         $this->showReviewModal = false;
         $this->refreshTable($this->freshRows($listUseCase));
         $this->dispatch('toast', variant: 'success', text: __('Request status updated.'));
+
+        if ($this->showViewModal) {
+            $this->openViewModal($this->reviewingId, $findUseCase);
+        }
+    }
+
+    /**
+     * "Guardar fecha" — the estimated resolution date's own save action,
+     * independent from changeStatus()/"Confirmar" so a reviewer can
+     * record/correct the date without also having to pick and confirm
+     * a status. Uses AssignEstimatedResolutionDateUseCase rather than
+     * ChangeRequestStatusUseCase precisely to avoid writing a same-
+     * status RequestStatusHistory row or firing a status-changed email
+     * for what isn't actually a status change.
+     */
+    public function saveEstimatedDate(AssignEstimatedResolutionDateUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase): void
+    {
+        $request = $findUseCase->handle($this->reviewingId);
+        $this->authorize('review', $request);
+
+        if ($this->reviewEstimatedDate === '') {
+            $this->addError('reviewEstimatedDate', __('Enter a date first.'));
+
+            return;
+        }
+
+        $useCase->handle($this->reviewingId, $this->reviewEstimatedDate);
+
+        $this->refreshTable($this->freshRows($listUseCase));
+        $this->dispatch('toast', variant: 'success', text: __('Estimated resolution date saved.'));
+
+        if ($this->showViewModal) {
+            $this->openViewModal($this->reviewingId, $findUseCase);
+        }
+    }
+
+    /**
+     * Docencia attaching its own document to a request — same storage
+     * pipeline the student-facing forms use (StoresRequestAttachments,
+     * RequestAttachmentRepositoryInterface::attach()), just triggered
+     * from the review modal instead of at creation time. Gated by the
+     * same 'review' ability as the rest of this modal rather than a new
+     * permission string, since every role that can review a request is
+     * exactly the role that should be able to attach supporting
+     * documents to it.
+     */
+    public function uploadReviewDocument(RequestAttachmentRepositoryInterface $attachmentRepository, FindRequestUseCase $findUseCase): void
+    {
+        $request = $findUseCase->handle($this->reviewingId);
+        $this->authorize('review', $request);
+
+        $this->validate([
+            'reviewDocumentType' => ['required', 'string', 'max:150'],
+            'reviewDocumentFile' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+        ]);
+
+        $attachment = $this->storeAttachment($this->reviewDocumentFile, $this->reviewDocumentType);
+        $attachmentRepository->attach($this->reviewingId, [$attachment]);
+
+        $this->reviewDocumentType = '';
+        $this->reviewDocumentFile = null;
+        $this->dispatch('toast', variant: 'success', text: __('Document uploaded.'));
 
         if ($this->showViewModal) {
             $this->openViewModal($this->reviewingId, $findUseCase);

@@ -389,49 +389,113 @@
             @if (count($viewingRequest['documents']) === 0)
             <p style="opacity:.6;">{{ __('No documents attached') }}</p>
             @else
-            <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; flex-direction:column; gap:8px;">
                 @foreach ($viewingRequest['documents'] as $document)
-                <a href="{{ route('requests.request.attachment-download', ['fileId' => $document['id']]) }}"
-                   target="_blank"
-                   class="file-chip"
-                   style="text-decoration:none;">
-                    <span class="file-chip-name">{{ $document['originalName'] }} ({{ $document['sizeKb'] }} KB)</span>
-                </a>
-                @endforeach
-            </div>
-            @endif
-        </div>
-        <div class="form-field">
-            <label>{{ __('Student academic record') }}</label>
-            @if (count($viewingRequest['studentRecord']['studyPlans']) > 0)
-            <div style="display:flex; flex-direction:column; gap:4px;">
-                @foreach ($viewingRequest['studentRecord']['studyPlans'] as $plan)
-                <span style="font-size:13px; opacity:.8;">{{ $plan['name'] }} — {{ __('Current level') }}: {{ $plan['currentLevel'] }}</span>
-                @endforeach
-            </div>
-            @endif
-            @if (count($viewingRequest['studentRecord']['courses']) === 0)
-            <p style="opacity:.6;">{{ __('No academic record found') }}</p>
-            @else
-            <div style="display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto;">
-                @foreach ($viewingRequest['studentRecord']['courses'] as $course)
-                <div class="file-chip">
-                    <span class="file-chip-name">{{ $course['course'] }}</span>
-                    <span style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-                        <span class="status-badge {{ match(true) {
-                                in_array($course['status'], ['Approved', 'Credited by Equivalence', 'Credited by Validation', 'Requirement Waived'], true) => 'positive',
-                                $course['status'] === 'Failed' => 'negative',
-                                default => '',
-                            } }}">{{ __($course['status']) }}</span>
-                        @if ($course['grade'] !== null)
-                        <span style="font-size:12.5px; opacity:.7;">{{ $course['grade'] }}</span>
-                        @endif
-                        <span style="font-size:12.5px; opacity:.6;">{{ $course['period'] }}</span>
-                    </span>
+                <div style="border:1px solid var(--border); border-radius:8px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+                    <span class="file-chip-name">{{ match ($document['documentType']) {
+                            'support_document' => __('Supporting document'),
+                            'external_program' => __('External course syllabus'),
+                            'grade_certification' => __('Grade certification'),
+                            'institution_proof' => __('Institution proof'),
+                            default => $document['documentType'],
+                        } }} — {{ $document['originalName'] }} ({{ $document['sizeKb'] }} KB)</span>
+                    <a href="{{ route('requests.request.attachment-download', ['fileId' => $document['id']]) }}"
+                       target="_blank"
+                       class="btn btn-secondary"
+                       style="width:fit-content; text-decoration:none;">{{ __('View') }}</a>
                 </div>
                 @endforeach
             </div>
             @endif
+        </div>
+        <div class="form-field" x-data="{ recordOpen: true }">
+            <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" @click="recordOpen = !recordOpen">
+                <label style="margin:0; cursor:pointer;">{{ __('Student academic record') }} <span style="opacity:.6; font-weight:400;">· {{ count($viewingRequest['studentRecord']['courses']) }} {{ __('subjects') }}</span></label>
+                <svg class="chevron-toggle" :class="{ 'open': recordOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            <div x-show="recordOpen" style="display:flex; flex-direction:column; gap:14px; margin-top:10px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div>
+                        <span style="font-size:12px; opacity:.6;">{{ __('Full name') }}</span>
+                        <p style="margin:2px 0 0;">{{ $viewingRequest['studentRecord']['fullName'] }}</p>
+                    </div>
+                    <div>
+                        <span style="font-size:12px; opacity:.6;">{{ __('National ID') }}</span>
+                        <p style="margin:2px 0 0;">{{ $viewingRequest['studentRecord']['nationalId'] }}</p>
+                    </div>
+                    <div>
+                        <span style="font-size:12px; opacity:.6;">{{ __('Institutional email') }}</span>
+                        <p style="margin:2px 0 0;">{{ $viewingRequest['studentRecord']['email'] ?? '—' }}</p>
+                    </div>
+                    <div>
+                        <span style="font-size:12px; opacity:.6;">{{ __('Enrollment') }}</span>
+                        <p style="margin:2px 0 0;">
+                            <span class="status-badge {{ $viewingRequest['studentRecord']['active'] ? 'positive' : 'negative' }}">
+                                {{ $viewingRequest['studentRecord']['active'] ? __('Enrollment active') : __('Enrollment inactive') }}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+
+                @foreach ($viewingRequest['studentRecord']['studyPlans'] as $plan)
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div>
+                        <span style="font-size:12px; opacity:.6;">{{ __('Current career') }}</span>
+                        <p style="margin:2px 0 0;">{{ $plan['career'] ?? '—' }}</p>
+                    </div>
+                    <div>
+                        <span style="font-size:12px; opacity:.6;">{{ __('Term in the career') }}</span>
+                        <p style="margin:2px 0 0;">{{ $plan['currentLevel'] }}</p>
+                        <span style="font-size:11px; opacity:.5;">{{ $plan['planLabel'] }}</span>
+                    </div>
+                </div>
+                @endforeach
+
+                <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                    <span class="status-badge positive">{{ __('Approved courses') }}: {{ $viewingRequest['studentRecord']['summary']['approved'] }}</span>
+                    <span class="status-badge negative">{{ __('Failed courses') }}: {{ $viewingRequest['studentRecord']['summary']['failed'] }}</span>
+                    <span class="status-badge system">{{ __('Credited courses') }}: {{ $viewingRequest['studentRecord']['summary']['credited'] }}</span>
+                    <span style="font-size:12.5px; opacity:.75;">{{ __('Average grade') }}: {{ $viewingRequest['studentRecord']['summary']['averageGrade'] ?? '—' }}</span>
+                    <span style="font-size:12.5px; opacity:.75;">{{ __('Credits') }}: {{ $viewingRequest['studentRecord']['summary']['earnedCredits'] }} / {{ $viewingRequest['studentRecord']['summary']['totalCredits'] }}</span>
+                </div>
+
+                @if (count($viewingRequest['studentRecord']['courses']) === 0)
+                <p style="opacity:.6;">{{ __('No academic record found') }}</p>
+                @else
+                <div style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:10px;">
+                    <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+                        <thead>
+                            <tr style="text-align:left;">
+                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Course') }}</th>
+                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Plan term') }}</th>
+                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Taken in') }}</th>
+                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Status') }}</th>
+                                <th style="padding:8px 10px; opacity:.6; font-weight:600;">{{ __('Grade') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($viewingRequest['studentRecord']['courses'] as $course)
+                            <tr style="border-top:1px solid var(--border);">
+                                <td style="padding:8px 10px;">{{ $course['course'] }}</td>
+                                <td style="padding:8px 10px;">{{ $course['planLevel'] ?? '—' }}</td>
+                                <td style="padding:8px 10px;">{{ $course['period'] }}</td>
+                                <td style="padding:8px 10px;">
+                                    <span class="status-badge {{ match(true) {
+                                            in_array($course['status'], ['Approved', 'Credited by Equivalence', 'Credited by Validation', 'Requirement Waived'], true) => 'positive',
+                                            $course['status'] === 'Failed' => 'negative',
+                                            default => '',
+                                        } }}">{{ __($course['status']) }}</span>
+                                </td>
+                                <td style="padding:8px 10px;">{{ $course['grade'] ?? '—' }}</td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @endif
+            </div>
         </div>
         @endif
     </x-ui.modal>
@@ -445,21 +509,69 @@
         </div>
         @endif
         <div class="form-field">
-            <label for="reviewStatus">{{ __('New status') }}</label>
-            <select id="reviewStatus" wire:model="reviewStatus">
-                <option value="Pending Review">{{ __('Pending Review') }}</option>
-                <option value="Approved">{{ __('Approved') }}</option>
-                <option value="Denied">{{ __('Denied') }}</option>
-            </select>
+            <label>{{ __('New status') }}</label>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                @foreach ([
+                    'Pending Review' => 'pending',
+                    'In Review' => 'pending',
+                    'Verified by Registro' => 'system',
+                    'Approved' => 'positive',
+                    'Denied' => 'negative',
+                ] as $statusValue => $variant)
+                <button type="button"
+                    class="status-badge {{ $variant }}"
+                    style="cursor:pointer; border:2px solid {{ $reviewStatus === $statusValue ? 'var(--textPrimary)' : 'transparent' }}; opacity:{{ $reviewStatus === $statusValue ? '1' : '.55' }};"
+                    wire:click="$set('reviewStatus', '{{ $statusValue }}')">{{ __($statusValue) }}</button>
+                @endforeach
+            </div>
         </div>
         <div class="form-field">
             <label for="reviewEstimatedDate">{{ __('Estimated resolution date') }} <span style="opacity:.6;">({{ __('optional — auto-assigned after 24h if left blank') }})</span></label>
-            <input type="date" id="reviewEstimatedDate" wire:model="reviewEstimatedDate">
+            <div style="display:flex; gap:10px; align-items:flex-start;">
+                <input type="date" id="reviewEstimatedDate" wire:model="reviewEstimatedDate" style="flex:1;" class="{{ $errors->has('reviewEstimatedDate') ? 'has-error' : '' }}">
+                <button type="button" class="btn btn-secondary" wire:click="saveEstimatedDate" wire:loading.attr="disabled" wire:target="saveEstimatedDate">{{ __('Save date') }}</button>
+            </div>
+            @error('reviewEstimatedDate') <span class="form-error">{{ $message }}</span> @enderror
         </div>
         <div class="form-field">
             <label for="reviewComment">{{ __('Comment') }} <span style="opacity:.6;">({{ __('required to deny') }})</span></label>
             <textarea id="reviewComment" wire:model="reviewComment" class="{{ $errors->has('reviewComment') ? 'has-error' : '' }}"></textarea>
             @error('reviewComment') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        <div class="form-field" style="border-top:1px solid var(--border); padding-top:14px;">
+            <label for="reviewDocumentType">{{ __('Document type') }}</label>
+            <input type="text" id="reviewDocumentType" wire:model="reviewDocumentType" class="{{ $errors->has('reviewDocumentType') ? 'has-error' : '' }}">
+            @error('reviewDocumentType') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        <div class="form-field">
+            <label for="reviewDocumentFile">{{ __('Attach a document') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
+            @if ($reviewDocumentFile && ! $errors->has('reviewDocumentFile'))
+                <div class="file-chip">
+                    <span class="file-chip-name">{{ $reviewDocumentFile->getClientOriginalName() }}</span>
+                    <button type="button" class="file-chip-remove" wire:click="$set('reviewDocumentFile', null)" aria-label="{{ __('Remove file') }}">&times;</button>
+                </div>
+            @else
+                <div
+                    x-data="{ dragging: false }"
+                    x-on:dragover.prevent="dragging = true"
+                    x-on:dragleave.prevent="dragging = false"
+                    x-on:drop.prevent="
+                        dragging = false;
+                        $refs.reviewDocumentFile.files = $event.dataTransfer.files;
+                        $refs.reviewDocumentFile.dispatchEvent(new Event('change'));
+                    "
+                    :class="dragging ? 'dropzone dropzone-active' : 'dropzone'"
+                >
+                    <input type="file" id="reviewDocumentFile" x-ref="reviewDocumentFile" wire:model="reviewDocumentFile" class="{{ $errors->has('reviewDocumentFile') ? 'has-error' : '' }}">
+                    <p class="dropzone-hint">{{ __('or drag a file here') }}</p>
+                </div>
+            @endif
+            @error('reviewDocumentFile')
+                <span class="form-error">{{ $message }}</span>
+            @elseif ($reviewDocumentFile)
+                <span class="form-success">{{ __('File attached') }}</span>
+            @enderror
+            <button type="button" class="btn btn-secondary" style="width:fit-content;" wire:click="uploadReviewDocument" wire:loading.attr="disabled" wire:target="uploadReviewDocument,reviewDocumentFile">{{ __('Upload document') }}</button>
         </div>
 
         <x-slot:footer>
