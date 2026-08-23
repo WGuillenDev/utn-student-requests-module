@@ -562,7 +562,17 @@
         <div class="form-field">
             <label>{{ __('New status') }}</label>
             <div style="display:flex; flex-wrap:wrap; gap:8px;">
-                @foreach (['Pending Review', 'In Review', 'Verified by Registro', 'Approved', 'Denied'] as $statusValue)
+                {{--
+                    Course Validation reaches Approved via "Reconocer" in
+                    the "Cursos a convalidar" table instead (see the view
+                    modal above), so it doesn't get its own button here —
+                    Requirement Waiver has no such alternate path, so it
+                    keeps a 5th "Aprobada" button.
+                --}}
+                @foreach (($reviewingType === 'Validation'
+                    ? ['Pending Review', 'Verified by Registro', 'In Review', 'Denied']
+                    : ['Pending Review', 'Verified by Registro', 'In Review', 'Approved', 'Denied']
+                ) as $statusValue)
                 <button type="button"
                     class="btn {{ $reviewStatus === $statusValue ? 'btn-primary' : 'btn-secondary' }}"
                     wire:click="$set('reviewStatus', '{{ $statusValue }}')">{{ __($statusValue) }}</button>

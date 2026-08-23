@@ -107,6 +107,17 @@ class RequestComponent extends Component
 
     public ?int $reviewingId = null;
 
+    /**
+     * The request's type, seeded by openReviewModal() — the status
+     * button row needs it to decide whether "Aprobada" gets its own
+     * button. Course Validation requests reach Approved through
+     * Reconocer in the "Cursos a convalidar" table instead, so the
+     * reference design's 4-button row (no Aprobada) applies there;
+     * Requirement Waiver has no such alternate path, so it keeps a
+     * 5th button.
+     */
+    public string $reviewingType = '';
+
     public string $reviewStatus = '';
 
     public string $reviewComment = '';
@@ -485,6 +496,7 @@ class RequestComponent extends Component
         $this->authorize('review', $request);
 
         $this->reviewingId = $id;
+        $this->reviewingType = $request->type();
         $this->reviewStatus = $request->status();
         $this->reviewComment = '';
         $this->reviewEstimatedDate = $request->estimatedResolutionDate() ?? '';

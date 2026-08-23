@@ -890,3 +890,135 @@ El equipo decidió (a) agregar los dos estados nuevos sin cálculo automático �
 - Un mockup de referencia no siempre cubre todos los flujos existentes: en este caso, el mockup solo mostraba el camino de Convalidación (con su tabla de cursos y Reconocer/No reconocer), sin considerar que Dispensa de requisito no tiene ese mecanismo alterno para llegar a "Aprobada". Antes de calcar un diseño de referencia al pie de la letra, vale la pena verificar que ningún camino funcional existente quede sin reemplazo.
 
 ---
+
+## Entrada — 22 de agosto de 2026 (continuación 3)
+**Tema:** Separar la descarga de documentos adjuntos en vista previa y descarga forzada, a partir de un bug real encontrado por el equipo
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, sin entorno local levantado en esta sesión
+
+---
+
+### 1. Qué se le consultó a la IA
+
+El equipo, revisando `app/Http/Controllers/RequestAttachmentDownloadController.php`, encontró que su llamada a `RequestEntity::reconstitute()` no incluía el argumento `waiverJustification` y pidió agregar esa línea exacta. Poco después, en un mensaje separado con instrucciones de código detalladas, pidió dividir esa misma descarga en dos acciones — `preview()` (el navegador muestra el archivo directamente) y `download()` (fuerza guardar, el comportamiento original) — compartiendo la misma lógica de resolución y autorización, y reemplazar el bloque "Attached documents" del modal de detalle por dos botones (Vista previa/Descargar) en vez de un solo enlace.
+
+### 2. Qué encontró la IA antes de actuar
+
+Confirmó que `waiverJustification` es un parámetro obligatorio (sin valor por defecto) en la firma de `Request::reconstitute()`, agregado en una sesión anterior sin actualizar este controlador — por lo que **cualquier** descarga de un documento adjunto, desde el lado de Docencia o del estudiante, fallaba con un error fatal de PHP por argumento faltante. No era un defecto cosmético: la ruta estaba completamente rota.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+La línea faltante, tal como la dio el equipo. Para la división preview/download: extraer la lógica compartida (resolver el archivo, confirmar que pertenece a un `Request`, autorizar contra `RequestPolicy::view()`) a un método privado `resolveFile()`, evitando duplicarla entre los dos métodos públicos nuevos. La ruta original mantuvo su nombre (`requests.request.attachment-download`), ahora apuntando a `download`; se agregó una ruta nueva `.../preview` → `preview`.
+
+### 4. Qué se rechazó y por qué
+
+No se usó una URL firmada para la vista previa — mismo razonamiento ya documentado en el controlador original: el archivo solo se enlaza desde una pantalla ya autorizada, así que no hay un caso real donde alguien no autenticado necesite ese link.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+`php -l` sobre el controlador y el archivo de rutas, y conteo manual de balance de directivas Blade en el bloque de adjuntos reemplazado — sin entorno ejecutable para probar la descarga/vista previa real en el navegador.
+
+### 6. Qué se aprendió del proceso
+
+Un parámetro nuevo agregado a un método de dominio con argumentos nombrados (`reconstitute()`) no rompe nada en tiempo de escritura si el editor no valida tipos — solo se manifiesta en tiempo de ejecución, y puede quedar invisible durante días si nadie ejercita exactamente esa ruta. Tras agregar un parámetro requerido a un método de reconstitución de dominio, vale la pena buscar (`grep`) todos los sitios que lo llaman, no solo los que se tocaron en la misma sesión que lo agregó.
+
+---
+
+## Entrada — 22 de agosto de 2026 (continuación 4)
+**Tema:** Adjuntos visibles en el modal de revisión y rediseño de los botones de estado
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, sin entorno local levantado en esta sesión
+
+---
+
+### 1. Qué se le consultó a la IA
+
+El equipo entregó tres instrucciones sobre el modal de revisión ("Cambiar estado"): (1) restylear el selector de estado — el enum, la migración y los 5 botones ya estaban resueltos de una entrada anterior, solo faltaba cambiar los pills de `status-badge` por un toggle `btn-primary`/`btn-secondary`; (2) mostrar en este modal los documentos ya adjuntos a la solicitud (hoy solo visibles en el modal de detalle), reutilizando el mismo bloque de vista previa/descarga recién creado; y (3) subir el límite de tamaño de la subida de documentos de Docencia a 10MB.
+
+### 2. Qué encontró la IA antes de actuar
+
+Verificó que la primera instrucción ya estaba resuelta salvo el estilo visual del botón. Para los adjuntos, confirmó que `openReviewModal()` nunca cargaba la lista de documentos (solo el formulario de subida), y que la consulta para traerla ya existía duplicada dentro de `openViewModal()`. Para el límite de tamaño, revisó los dos patrones de validación de archivos ya existentes en el proyecto (`RequestForm`: `mimes:pdf,jpg,jpeg,png` en 5MB y 10MB según el formulario) y confirmó que ninguno acepta Word/Excel, pese a que el mensaje del equipo daba a entender que sí.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+Restylear los botones de estado a `btn-primary`/`btn-secondary`. Extraer la consulta de documentos a un método compartido `documentsFor()`, usado ahora por `openViewModal()`, `openReviewModal()` y `uploadReviewDocument()` (para refrescar la lista tras subir uno nuevo), evitando que dos copias de la misma consulta diverjan con el tiempo. Subir el límite a 10MB, alineado con el límite más generoso que ya existía en el formulario de convalidación del estudiante, en vez de mantenerlo en 5MB o inventar un tercer límite.
+
+### 4. Qué se rechazó y por qué
+
+No se agregaron tipos MIME adicionales (Word/Excel) como sugería el mensaje del equipo — al no existir ese patrón en ningún formulario real del proyecto, agregarlo aquí habría introducido una tercera regla de validación inconsistente sin que el equipo lo confirmara explícitamente con ese detalle.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+`php -l` sobre `RequestComponent.php`, `json_decode` sobre las traducciones nuevas, y conteo de balance de directivas Blade (`@if`/`@endif`: 18/18, `@foreach`/`@endforeach`: 8/8) — sin poder probar el flujo real en el navegador.
+
+### 6. Qué se aprendió del proceso
+
+Cuando el mismo dato (aquí, la lista de documentos de una solicitud) se necesita en más de un lugar de la interfaz, conviene extraerlo a un método compartido apenas aparece la segunda necesidad, en vez de esperar una tercera copia que lo justifique — la primera duplicación ya es la señal. Antes de ampliar una validación siguiendo una instrucción que asume que cierto comportamiento "ya existe" en el código, vale la pena confirmarlo contra el código real en vez de asumir que la premisa es correcta.
+
+---
+
+## Entrada — 22 de agosto de 2026 (continuación 5)
+**Tema:** Historial de estados y stepper de avance en el modal de detalle
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, sin entorno local levantado en esta sesión
+
+---
+
+### 1. Qué se le consultó a la IA
+
+El equipo señaló que la tabla `request_status_history` y su modelo ya existían, y que cada cambio de estado ya se registraba automáticamente en `ChangeRequestStatusUseCase::handle()` (estado anterior, estado nuevo, comentario, usuario, fecha) — pero nunca se mostraba en ninguna pantalla. Pidió agregarlo al modal de detalle con un formato específico por entrada, marcando explícitamente como pendiente de decisión del equipo si además había que crear una fila inicial de historial en `CreateRequestUseCase` (algo que hoy no existe). Por separado, pidió un stepper visual de 3 pasos (Recibida / En trámite / Aprobada-o-Denegada) derivado del `status`, señalando también como decisión abierta si el tercer paso debía tener una etiqueta fija ("Resuelta") o dinámica según el resultado.
+
+### 2. Qué encontró la IA antes de actuar
+
+Confirmó el modelo `RequestStatusHistoryModel` y su relación `user()`. Para el stepper, verificó que las variables CSS que el equipo asumía que existían (`--positive`, `--pending`) en realidad no existen como tales en `app.css` — el sistema de diseño solo define clases (`.status-badge.positive`, etc.) respaldadas por otros nombres de variable (`--badgeCustomText` para verde, `--actionDeleteText` para rojo, `--actionEditText` para ámbar), así que hubo que mapear a los tokens reales en vez de usar los nombres literales que el equipo propuso.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+La consulta de historial (`statusHistoryFor()`), mostrada con el formato pedido (estado anterior → estado nuevo, badge de quién lo cambió o "Sistema", fecha, comentario aparte). El stepper de 3 pasos, con "En trámite" cumplido si el estado actual no es el inicial o si ya existe algún registro de historial (las dos condiciones que el equipo ofreció como alternativas, combinadas con "o"). Y, tras preguntarlo explícitamente al equipo con una pregunta directa, la etiqueta dinámica ("Aprobada"/"Denegada" con color) para el tercer paso, en vez de una etiqueta fija neutra.
+
+### 4. Qué se rechazó y por qué
+
+No se tocó `CreateRequestUseCase` para generar la fila inicial de historial que el mockup de referencia mostraba — el equipo lo marcó explícitamente como una decisión pendiente, no como parte de esta instrucción. Hoy las solicitudes no muestran una entrada "(nueva) → Pendiente de revisión" en su historial, solo los cambios que Docencia ya hizo después de la creación.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+Mismas limitaciones de siempre en este entorno (sin `vendor/`/`.env`): `php -l`, `json_decode` sobre las traducciones nuevas, y conteo de balance de directivas Blade, que llegó a 20/20 (`@if`/`@endif`), 9/9 (`@foreach`/`@endforeach`) y 2/2 (`@php`/`@endphp`) tras este cambio.
+
+### 6. Qué se aprendió del proceso
+
+Cuando una instrucción asume la existencia de algo específico del sistema de diseño (aquí, variables CSS con nombres concretos), vale la pena verificarlo contra el CSS real antes de usarlo literalmente — el nombre de una clase (`.positive`) no siempre corresponde a una variable CSS del mismo nombre. Preguntar explícitamente por una decisión de diseño que el propio equipo marcó como abierta (el texto del tercer paso del stepper), en vez de elegir una opción "razonable" por su cuenta, evita tener que rehacer el trabajo si el equipo prefería la otra opción.
+
+---
+
+## Entrada — 22 de agosto de 2026 (continuación 6)
+**Tema:** Botones de "Cambiar estado a" del modal de revisión — 4 sin "Aprobada" para Convalidación, 5 para Dispensa de requisito
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, sin entorno local levantado en esta sesión
+
+---
+
+### 1. Qué se le consultó a la IA
+
+El equipo mostró un recorte adicional de la referencia (con datos de ejemplo, incluyendo un archivo con nombre generado por IA) señalando "falta esta sección", sin precisar qué exactamente. Ante la pregunta de la IA, aclaró que se trataba del orden y la cantidad de los botones de "Cambiar estado a": la referencia muestra 4 (Pendiente de revisión, Verificada por Registro, En revisión, Denegada), sin "Aprobada" y en un orden distinto al que ya existía.
+
+### 2. Qué encontró la IA antes de actuar
+
+Antes de aplicar el cambio, señaló la consecuencia que tendría quitar "Aprobada" sin condición: las solicitudes de tipo Dispensa de requisito no tienen ninguna otra vía en la interfaz para llegar a ese estado (a diferencia de Convalidación, que ya puede hacerlo vía "Reconocer" en la tabla "Cursos a convalidar") — aplicar la referencia literalmente en ambos tipos habría dejado a Dispensa de requisito sin forma de aprobarse desde el modal.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+Mostrar los 4 botones de la referencia (sin "Aprobada", en su orden exacto) solo para solicitudes de tipo Convalidación, y mantener los 5 (con "Aprobada" al final, antes de "Denegada") para Dispensa de requisito — la opción que la IA recomendó al plantear la pregunta. Esto requirió agregar `$reviewingType` (poblado en `openReviewModal()` desde `$request->type()`) para que la vista supiera qué lista de botones renderizar.
+
+### 4. Qué se rechazó y por qué
+
+No se quitó "Aprobada" de forma universal como mostraba la referencia al pie de la letra — se habría roto la única vía manual de aprobación para Dispensa de requisito, y el equipo, ante la pregunta explícita, prefirió la versión condicional en vez de aceptar esa regresión funcional.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+`php -l` y conteo de balance de directivas Blade (`@if`/`@endif`: 20/20, `@foreach`/`@endforeach`: 9/9) — sin poder confirmar visualmente en el navegador que cada tipo de solicitud muestra el conjunto de botones correcto.
+
+### 6. Qué se aprendió del proceso
+
+Una instrucción de "hacer que coincida con la referencia" no siempre puede aplicarse literalmente si la referencia solo muestra un caso (aquí, una solicitud de Convalidación) y el sistema real tiene más de un flujo (Convalidación y Dispensa de requisito) compartiendo la misma pantalla. Antes de aplicar un cambio visual que quita una opción, vale la pena verificar si esa opción es la única vía funcional para algún caso de uso, en vez de asumir que "menos botones" es simplemente una mejora visual sin costo.
+
+---
