@@ -36,6 +36,8 @@ final class Request
         private readonly ?string $waiverJustification,
         private ?string $originInstitution,
         private ?string $externalCourse,
+        private ?string $externalCourseCode,
+        private ?int $externalCourseCredits,
         private ?int $validationPrecedentId,
         private ?string $engineResult,
         private ?int $violatedRuleId,
@@ -74,6 +76,8 @@ final class Request
             waiverJustification: $waiverJustification,
             originInstitution: $originInstitution,
             externalCourse: $externalCourse,
+            externalCourseCode: null,
+            externalCourseCredits: null,
             validationPrecedentId: $validationPrecedentId,
             engineResult: $engineResult,
             violatedRuleId: $violatedRuleId,
@@ -100,6 +104,8 @@ final class Request
         ?string $estimatedResolutionDate,
         ?int $reviewerId,
         ?string $createdAt = null,
+        ?string $externalCourseCode = null,
+        ?int $externalCourseCredits = null,
     ): self {
         return new self(
             id: $id,
@@ -110,6 +116,8 @@ final class Request
             waiverJustification: $waiverJustification,
             originInstitution: $originInstitution,
             externalCourse: $externalCourse,
+            externalCourseCode: $externalCourseCode,
+            externalCourseCredits: $externalCourseCredits,
             validationPrecedentId: $validationPrecedentId,
             engineResult: $engineResult,
             violatedRuleId: $violatedRuleId,
@@ -142,6 +150,20 @@ final class Request
     public function isFinal(): bool
     {
         return in_array($this->status, self::FINAL_STATUSES, true);
+    }
+
+    /**
+     * Validation-only: the external course's own code/credit count,
+     * captured by Docencia while reviewing (never at submission time),
+     * to compare against the equivalent UTN course before deciding
+     * Reconocer/No reconocer. Deliberately not gated by isFinal() — a
+     * reviewer may correct these while still deciding, same rationale
+     * as assignEstimatedResolutionDate().
+     */
+    public function setExternalCourseData(?string $code, ?int $credits): void
+    {
+        $this->externalCourseCode = $code;
+        $this->externalCourseCredits = $credits;
     }
 
     /**
@@ -229,6 +251,16 @@ final class Request
     public function externalCourse(): ?string
     {
         return $this->externalCourse;
+    }
+
+    public function externalCourseCode(): ?string
+    {
+        return $this->externalCourseCode;
+    }
+
+    public function externalCourseCredits(): ?int
+    {
+        return $this->externalCourseCredits;
     }
 
     public function validationPrecedentId(): ?int

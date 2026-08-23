@@ -98,6 +98,8 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         $model->waiver_justification = $request->waiverJustification();
         $model->origin_institution = $request->originInstitution();
         $model->external_course = $request->externalCourse();
+        $model->external_course_code = $request->externalCourseCode();
+        $model->external_course_credits = $request->externalCourseCredits();
         $model->validation_precedent_id = $request->validationPrecedentId();
         $model->engine_result = $request->engineResult();
         $model->violated_rule_id = $request->violatedRuleId();
@@ -225,6 +227,8 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
             estimatedResolutionDate: $model->estimated_resolution_date?->toDateString(),
             reviewerId: $model->reviewer_id,
             createdAt: $model->created_at?->toDateTimeString(),
+            externalCourseCode: $model->external_course_code,
+            externalCourseCredits: $model->external_course_credits,
         );
     }
 }

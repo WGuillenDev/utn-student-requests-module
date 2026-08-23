@@ -267,23 +267,26 @@
          status, so closed requests remain reviewable after the fact. --}}
     <x-ui.modal :show="$showViewModal" :title="__('Request detail')" close-action="closeViewModal">
         @if ($viewingRequest)
+        <x-slot:titleExtra>
+            <span class="status-badge {{ match(true) {
+                    $viewingRequest['status'] === 'Approved' => 'positive',
+                    $viewingRequest['status'] === 'Denied' => 'negative',
+                    default => 'pending',
+                } }}">{{ __($viewingRequest['status']) }}</span>
+        </x-slot:titleExtra>
+        @if ($viewingRequest['type'] === 'Requirement Waiver')
         <div class="form-field">
             <label>{{ __('Student') }}</label>
             <p>{{ $viewingRequest['student'] }}</p>
         </div>
         <div class="form-field">
             <label>{{ __('Type') }}</label>
-            <p>{{ match ($viewingRequest['type']) {
-                    'Requirement Waiver' => __('Requirement Waiver'),
-                    'Validation' => __('Course Validation'),
-                    default => $viewingRequest['type'],
-                } }}</p>
+            <p>{{ __('Requirement Waiver') }}</p>
         </div>
         <div class="form-field">
             <label>{{ __('Course') }}</label>
             <p>{{ $viewingRequest['course'] }}</p>
         </div>
-        @if ($viewingRequest['type'] === 'Requirement Waiver')
         <div class="form-field">
             <label>{{ __('Unmet requirement') }}</label>
             <p>{{ $viewingRequest['requiredCourse'] ?? '—' }}</p>
@@ -298,12 +301,72 @@
         </div>
         @else
         <div class="form-field">
-            <label>{{ __('Origin institution') }}</label>
-            <p>{{ $viewingRequest['originInstitution'] ?? '—' }}</p>
+            <label>{{ __('Courses to validate') }}</label>
+            <div style="border:1px solid var(--border); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:12px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div>
+                        <span style="font-size:12px; opacity:.6;">{{ __('UTN course') }}</span>
+                        <p style="margin:2px 0 0;">{{ $viewingRequest['course'] }}</p>
+                    </div>
+                    <div>
+                        <span style="font-size:12px; opacity:.6;">{{ __('External course name') }}</span>
+                        <p style="margin:2px 0 0;">{{ $viewingRequest['externalCourse'] ?? '—' }}</p>
+                    </div>
+                </div>
+                <div>
+                    <span style="font-size:12px; opacity:.6;">{{ __('Origin institution') }}</span>
+                    <p style="margin:2px 0 0;">{{ $viewingRequest['originInstitution'] ?? '—' }}</p>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end;">
+                    <div class="form-field" style="gap:4px;">
+                        <label for="viewingExternalCourseCode" style="font-size:12px;">{{ __('External course code') }}</label>
+                        <input type="text" id="viewingExternalCourseCode" wire:model="viewingExternalCourseCode" @if (! $viewingRequest['canReview']) disabled @endif>
+                    </div>
+                    <div class="form-field" style="gap:4px;">
+                        <label for="viewingExternalCourseCredits" style="font-size:12px;">{{ __('External course credits') }}</label>
+                        <input type="number" min="0" max="255" id="viewingExternalCourseCredits" wire:model="viewingExternalCourseCredits" @if (! $viewingRequest['canReview']) disabled @endif>
+                    </div>
+                    @if ($viewingRequest['canReview'])
+                    <button type="button" class="btn btn-secondary" wire:click="saveExternalCourseData" wire:loading.attr="disabled" wire:target="saveExternalCourseData">{{ __('Save external course data') }}</button>
+                    @endif
+                </div>
+
+                <div>
+                    <span style="font-size:12px; opacity:.6;">{{ __('Resolution') }}</span>
+                    <p style="margin:2px 0 0;">
+                        <span class="status-badge {{ match(true) {
+                                $viewingRequest['status'] === 'Approved' => 'positive',
+                                $viewingRequest['status'] === 'Denied' => 'negative',
+                                default => 'pending',
+                            } }}">{{ match(true) {
+                                $viewingRequest['status'] === 'Approved' => __('Recognized'),
+                                $viewingRequest['status'] === 'Denied' => __('Not recognized'),
+                                default => __('Pending'),
+                            } }}</span>
+                    </p>
+                </div>
+
+                @if ($viewingRequest['canReview'])
+                <div class="form-field" style="gap:6px;">
+                    <label for="viewingCourseReason" style="font-size:12px;">{{ __('Reason, required to not recognize this course') }}</label>
+                    <textarea id="viewingCourseReason" wire:model="reviewComment" class="{{ $errors->has('reviewComment') ? 'has-error' : '' }}"></textarea>
+                    @error('reviewComment') <span class="form-error">{{ $message }}</span> @enderror
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button type="button" class="btn btn-primary" wire:click="changeStatus('Approved')" wire:loading.attr="disabled" wire:target="changeStatus">{{ __('Recognize') }}</button>
+                    <button type="button" class="btn btn-orange" wire:click="changeStatus('Denied')" wire:loading.attr="disabled" wire:target="changeStatus">{{ __('Do not recognize') }}</button>
+                </div>
+                @endif
+            </div>
         </div>
         <div class="form-field">
-            <label>{{ __('External course name') }}</label>
-            <p>{{ $viewingRequest['externalCourse'] ?? '—' }}</p>
+            <label>{{ __('Student') }}</label>
+            <p>{{ $viewingRequest['student'] }}</p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('Type') }}</label>
+            <p>{{ __('Course Validation') }}</p>
         </div>
         @if ($viewingRequest['precedentResolution'])
         <div class="form-field">
@@ -313,14 +376,6 @@
         </div>
         @endif
         @endif
-        <div class="form-field">
-            <label>{{ __('Status') }}</label>
-            <p><span class="status-badge {{ match(true) {
-                    $viewingRequest['status'] === 'Approved' => 'positive',
-                    $viewingRequest['status'] === 'Denied' => 'negative',
-                    default => 'pending',
-                } }}">{{ __($viewingRequest['status']) }}</span></p>
-        </div>
         <div class="form-field">
             <label>{{ __('Estimated resolution date') }}</label>
             <p>{{ $viewingRequest['estimatedResolutionDate'] ?? '—' }}</p>

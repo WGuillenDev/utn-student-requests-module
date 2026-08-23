@@ -24,6 +24,7 @@ use Src\Requests\Request\Application\UseCases\CreateRequestUseCase;
 use Src\Requests\Request\Application\UseCases\DeleteRequestUseCase;
 use Src\Requests\Request\Application\UseCases\FindRequestUseCase;
 use Src\Requests\Request\Application\UseCases\ListRequestsUseCase;
+use Src\Requests\Request\Application\UseCases\SaveExternalCourseDataUseCase;
 use Src\Requests\Request\Domain\Entities\Request;
 use Src\Requests\Request\Domain\Exceptions\InvalidStatusTransitionException;
 use Src\Requests\Request\Presentation\Livewire\Forms\RequestForm;
@@ -50,11 +51,13 @@ class RequestComponent extends Component
     public bool $showReviewModal = false;
 
     /**
-     * Read-only detail view — unlike showReviewModal (only available
-     * while a request is still open, since that modal's real purpose
-     * is changing status), this one is available for EVERY request
-     * regardless of status, so Docencia can always look back at a
-     * closed request's full data and attached documents.
+     * Detail view — available for EVERY request regardless of status,
+     * so Docencia can always look back at a closed request's full data
+     * and attached documents. For an open Validation request it is no
+     * longer strictly read-only: the "Cursos a convalidar" section
+     * embeds the Reconocer/No reconocer decision inline (via the same
+     * changeStatus() used by showReviewModal, see below) instead of
+     * requiring a trip to the separate review modal.
      */
     public bool $showViewModal = false;
 
@@ -62,6 +65,16 @@ class RequestComponent extends Component
      * @var array<string, mixed>|null
      */
     public ?array $viewingRequest = null;
+
+    /**
+     * Bound to the "Código"/"Créditos" inputs in the "Cursos a
+     * convalidar" table — kept separate from $viewingRequest (a plain
+     * read array rebuilt on every open/refresh) since these are live
+     * form inputs.
+     */
+    public string $viewingExternalCourseCode = '';
+
+    public string $viewingExternalCourseCredits = '';
 
     public ?int $reviewingId = null;
 
@@ -155,12 +168,17 @@ class RequestComponent extends Component
     }
 
     /**
-     * Read-only detail — available for any request the user is
-     * authorized to 'view' (RequestPolicy::view()), open or closed.
-     * Builds a plain array (not the domain entity) because the blade
-     * also needs cross-context labels (student name, course label,
-     * precedent resolution, attached documents) that don't belong on
-     * the Request entity itself.
+     * Detail — available for any request the user is authorized to
+     * 'view' (RequestPolicy::view()), open or closed. Builds a plain
+     * array (not the domain entity) because the blade also needs
+     * cross-context labels (student name, course label, precedent
+     * resolution, attached documents) that don't belong on the Request
+     * entity itself.
+     *
+     * Also seeds $reviewingId/$reviewComment (normally openReviewModal's
+     * job) so the "Cursos a convalidar" table's inline Reconocer/No
+     * reconocer buttons have a valid target to call changeStatus()
+     * against without opening the separate review modal.
      */
     public function openViewModal(int $id, FindRequestUseCase $useCase): void
     {
@@ -181,6 +199,8 @@ class RequestComponent extends Component
             'waiverJustification' => $request->waiverJustification(),
             'originInstitution' => $request->originInstitution(),
             'externalCourse' => $request->externalCourse(),
+            'externalCourseCode' => $request->externalCourseCode(),
+            'externalCourseCredits' => $request->externalCourseCredits(),
             'engineResult' => $request->engineResult(),
             'status' => $request->status(),
             'estimatedResolutionDate' => $request->estimatedResolutionDate(),
@@ -200,9 +220,46 @@ class RequestComponent extends Component
                 ])
                 ->all(),
             'studentRecord' => $this->studentRecord($request->studentId()),
+            'canReview' => Auth::user()->can('review', $request) && ! $request->isFinal(),
         ];
 
+        $this->viewingExternalCourseCode = $request->externalCourseCode() ?? '';
+        $this->viewingExternalCourseCredits = $request->externalCourseCredits() !== null
+            ? (string) $request->externalCourseCredits()
+            : '';
+
+        $this->reviewingId = $id;
+        $this->reviewStatus = $request->status();
+        $this->reviewComment = '';
+        $this->resetValidation();
+
         $this->showViewModal = true;
+    }
+
+    /**
+     * "Guardar datos externos" — persists the external course's code/
+     * credits without touching status, so Docencia can record what the
+     * foreign transcript says before deciding Reconocer/No reconocer.
+     */
+    public function saveExternalCourseData(SaveExternalCourseDataUseCase $useCase, FindRequestUseCase $findUseCase): void
+    {
+        $request = $findUseCase->handle($this->reviewingId);
+        $this->authorize('review', $request);
+
+        $credits = $this->viewingExternalCourseCredits !== ''
+            ? (int) $this->viewingExternalCourseCredits
+            : null;
+
+        $useCase->handle(
+            requestId: $this->reviewingId,
+            code: $this->viewingExternalCourseCode !== '' ? $this->viewingExternalCourseCode : null,
+            credits: $credits,
+        );
+
+        $this->viewingRequest['externalCourseCode'] = $this->viewingExternalCourseCode !== '' ? $this->viewingExternalCourseCode : null;
+        $this->viewingRequest['externalCourseCredits'] = $credits;
+
+        $this->dispatch('toast', variant: 'success', text: __('External course data saved.'));
     }
 
     /**
@@ -268,8 +325,21 @@ class RequestComponent extends Component
         $this->reviewPrecedentResolution = null;
     }
 
-    public function changeStatus(ChangeRequestStatusUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase): void
+    /**
+     * $status lets the "Cursos a convalidar" table's Reconocer/No
+     * reconocer buttons drive this same method directly (with
+     * $reviewingId seeded by openViewModal()) instead of going through
+     * the separate review modal's status dropdown — Reconocer/No
+     * reconocer are just Approved/Denied under another name, per the
+     * team's decision to keep a single status field rather than add a
+     * distinct per-course resolution field.
+     */
+    public function changeStatus(ChangeRequestStatusUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase, ?string $status = null): void
     {
+        if ($status !== null) {
+            $this->reviewStatus = $status;
+        }
+
         $request = $findUseCase->handle($this->reviewingId);
         $this->authorize('review', $request);
 
@@ -296,6 +366,10 @@ class RequestComponent extends Component
         $this->showReviewModal = false;
         $this->refreshTable($this->freshRows($listUseCase));
         $this->dispatch('toast', variant: 'success', text: __('Request status updated.'));
+
+        if ($this->showViewModal) {
+            $this->openViewModal($this->reviewingId, $findUseCase);
+        }
     }
 
     public function delete(int $id, DeleteRequestUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase): void
