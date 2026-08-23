@@ -389,20 +389,23 @@
             @if (count($viewingRequest['documents']) === 0)
             <p style="opacity:.6;">{{ __('No documents attached') }}</p>
             @else
-            <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; flex-direction:column; gap:10px;">
                 @foreach ($viewingRequest['documents'] as $document)
-                <div style="border:1px solid var(--border); border-radius:8px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
-                    <span class="file-chip-name">{{ match ($document['documentType']) {
-                            'support_document' => __('Supporting document'),
-                            'external_program' => __('External course syllabus'),
-                            'grade_certification' => __('Grade certification'),
-                            'institution_proof' => __('Institution proof'),
-                            default => $document['documentType'],
-                        } }} — {{ $document['originalName'] }} ({{ $document['sizeKb'] }} KB)</span>
-                    <a href="{{ route('requests.request.attachment-download', ['fileId' => $document['id']]) }}"
-                       target="_blank"
-                       class="btn btn-secondary"
-                       style="width:fit-content; text-decoration:none;">{{ __('View') }}</a>
+                <div class="file-chip" style="flex-direction:column; align-items:stretch; gap:8px;">
+                    <span class="file-chip-name">{{ $document['originalName'] }} ({{ $document['sizeKb'] }} KB)</span>
+                    <div style="display:flex; gap:8px;">
+                        <a href="{{ route('requests.request.attachment-preview', ['fileId' => $document['id']]) }}"
+                           target="_blank"
+                           class="btn btn-secondary"
+                           style="text-decoration:none; flex:1; justify-content:center;">
+                            {{ __('Preview') }}
+                        </a>
+                        <a href="{{ route('requests.request.attachment-download', ['fileId' => $document['id']]) }}"
+                           class="btn btn-primary"
+                           style="text-decoration:none; flex:1; justify-content:center;">
+                            {{ __('Download') }}
+                        </a>
+                    </div>
                 </div>
                 @endforeach
             </div>

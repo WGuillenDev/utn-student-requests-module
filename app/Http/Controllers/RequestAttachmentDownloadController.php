@@ -27,7 +27,36 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class RequestAttachmentDownloadController extends Controller
 {
-    public function __invoke(int $fileId): StreamedResponse|Response
+    /**
+     * Content-Disposition: inline — the browser renders the PDF/image
+     * directly instead of prompting to save it.
+     */
+    public function preview(int $fileId): StreamedResponse|Response
+    {
+        $file = $this->resolveFile($fileId);
+
+        return Storage::disk($file->disk)->response($file->path, $file->original_name);
+    }
+
+    /**
+     * Content-Disposition: attachment — forces the save dialog, the
+     * same behavior this controller had before preview() existed.
+     */
+    public function download(int $fileId): StreamedResponse|Response
+    {
+        $file = $this->resolveFile($fileId);
+
+        return Storage::disk($file->disk)->download($file->path, $file->original_name);
+    }
+
+    /**
+     * Shared by preview()/download(): resolves the file, confirms it
+     * belongs to a Request (not some other fileable type), and
+     * authorizes against the exact same RequestPolicy::view() ability
+     * both actions rely on — the two only differ in how the found file
+     * is finally streamed back.
+     */
+    private function resolveFile(int $fileId): FileModel
     {
         $file = FileModel::query()->findOrFail($fileId);
 
@@ -56,6 +85,6 @@ final class RequestAttachmentDownloadController extends Controller
 
         abort_unless(Storage::disk($file->disk)->exists($file->path), 404);
 
-        return Storage::disk($file->disk)->download($file->path, $file->original_name);
+        return $file;
     }
 }

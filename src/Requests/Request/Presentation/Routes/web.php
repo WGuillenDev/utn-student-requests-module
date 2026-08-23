@@ -16,6 +16,11 @@ Route::middleware(['web', 'auth', 'verified'])
     ->name('requests.student-request.index');
 
 Route::middleware(['web', 'auth', 'verified'])
-    ->get('solicitudes/documentos/{fileId}', RequestAttachmentDownloadController::class)
+    ->get('solicitudes/documentos/{fileId}', [RequestAttachmentDownloadController::class, 'download'])
     ->whereNumber('fileId')
     ->name('requests.request.attachment-download');
+
+Route::middleware(['web', 'auth', 'verified'])
+    ->get('solicitudes/documentos/{fileId}/preview', [RequestAttachmentDownloadController::class, 'preview'])
+    ->whereNumber('fileId')
+    ->name('requests.request.attachment-preview');
