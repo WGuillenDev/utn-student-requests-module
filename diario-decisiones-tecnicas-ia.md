@@ -1055,3 +1055,36 @@ No se intentó preservar un paso de "Confirmar" independiente (por ejemplo, agre
 Al fusionar dos pantallas que antes tenían flujos de interacción distintos (una de dos pasos con confirmación aparte, otra de un clic), hay que revisar explícitamente si alguna de las dos piezas dependía de una estructura que la fusión elimina (aquí, el botón "Confirmar" del pie del modal que desaparece) — copiar el markup sin ese análisis habría dejado un control visualmente presente pero funcionalmente muerto. Cuando el equipo interrumpe una pregunta de aclaración con una decisión ya tomada ("ya sé qué quiero hacer"), conviene ejecutar esa decisión directamente en vez de insistir en resolver primero la ambigüedad original, que quedó superada por la nueva instrucción.
 
 ---
+
+## Entrada — 22 de agosto de 2026 (continuación 8)
+**Tema:** El enum de `status` nunca se actualizó de verdad en SQLite — las dos migraciones anteriores solo evitaban el error de sintaxis, no arreglaban la restricción real
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con el equipo probando en su propio entorno local (SQLite)
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Al hacer clic en "Verificada por Registro" en el modal ya fusionado, el equipo reportó un `Illuminate\Database\QueryException`. La primera captura mostraba `no such column: external_course_code` — resuelto corriendo `php artisan migrate` (las migraciones del día no se habían aplicado). Al reintentar, apareció un segundo error distinto: `SQLSTATE[23000]: Integrity constraint violation: 19 CHECK constraint failed: status`, ya con `php artisan migrate:status` confirmando que las cuatro migraciones relevantes (incluida la que agrega `In Review`/`Verified by Registro` al enum) figuraban como "Ran".
+
+### 2. Qué encontró la IA antes de actuar
+
+Revisando las dos migraciones que tocan el enum de `status` (`2026_08_21_194439` y `2026_08_22_190000`), confirmó que ambas usan SQL crudo (`ALTER TABLE requests MODIFY status ENUM(...)`) — sintaxis exclusiva de MySQL — envuelto en `if (driver !== 'sqlite') { ... }`. Ese guard, agregado en una sesión anterior precisamente para no romper con un error de sintaxis en SQLite, tuvo un efecto secundario no previsto entonces: en SQLite el `ALTER` simplemente nunca se ejecuta, así que la restricción CHECK que SQLite usa para emular `enum()` se quedó exactamente como la dejó la migración de creación de la tabla (`2026_08_07_100008`), sin `Verified by Registro` (y, en su momento, sin `In Review` una vez que se había quitado). Es decir: las migraciones "corrieron" (aparecen como Ran) pero en SQLite no cambiaron nada.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+Una migración nueva (no se editaron las dos anteriores, ya aplicadas) que usa `Blueprint::enum('status', [...])->change()` — la API fluida de Laravel, que el propio framework traduce correctamente por motor (en MySQL genera el `ALTER MODIFY` equivalente; en SQLite reconstruye la tabla completa con la nueva restricción CHECK) — en vez de seguir escribiendo SQL crudo por motor. Reemplaza definitivamente el patrón de "SQL crudo + guard por driver" que había quedado corto.
+
+### 4. Qué se rechazó y por qué
+
+No se editaron las migraciones `2026_08_21_194439` ni `2026_08_22_190000` para "arreglarlas" — ya están marcadas como ejecutadas en las bases de datos existentes (la del equipo incluida), así que modificarlas no las volvería a correr; el único camino correcto en Laravel es una migración nueva que corrija el estado actual, no una edición retroactiva de una migración ya aplicada.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+`php -l` sobre la migración nueva. No fue posible ejecutar `php artisan migrate` en este entorno (sin `vendor/`) para confirmar que `Blueprint::change()` efectivamente reconstruye la tabla en SQLite sin requerir `doctrine/dbal` (no está en `composer.json`) — quedó pendiente que el equipo la corra y confirme, ya que es la única verificación real posible con la versión de Laravel de este proyecto.
+
+### 6. Qué se aprendió del proceso
+
+Un guard `if (driver !== 'sqlite')` alrededor de SQL crudo evita el error de sintaxis inmediato, pero no es lo mismo que "la migración funciona en SQLite" — sencillamente no hace nada ahí, y ese vacío solo se manifiesta más tarde, en el primer intento de escribir un valor que el guard nunca llegó a habilitar. La lección de fondo, ya aprendida una vez con el bug del `MODIFY` en la entrada del 21 de agosto y repetida aquí: cuando una migración necesita tocar un enum/CHECK constraint de forma que funcione en más de un motor de base de datos, la API fluida de Laravel (`change()`) es la herramienta correcta desde el principio — el SQL crudo por motor es lo que obliga a ir parchando driver por driver cada vez que aparece un caso nuevo.
+
+---
