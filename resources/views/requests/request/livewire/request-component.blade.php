@@ -510,16 +510,9 @@
         <div class="form-field">
             <label>{{ __('New status') }}</label>
             <div style="display:flex; flex-wrap:wrap; gap:8px;">
-                @foreach ([
-                    'Pending Review' => 'pending',
-                    'In Review' => 'pending',
-                    'Verified by Registro' => 'system',
-                    'Approved' => 'positive',
-                    'Denied' => 'negative',
-                ] as $statusValue => $variant)
+                @foreach (['Pending Review', 'In Review', 'Verified by Registro', 'Approved', 'Denied'] as $statusValue)
                 <button type="button"
-                    class="status-badge {{ $variant }}"
-                    style="cursor:pointer; border:2px solid {{ $reviewStatus === $statusValue ? 'var(--textPrimary)' : 'transparent' }}; opacity:{{ $reviewStatus === $statusValue ? '1' : '.55' }};"
+                    class="btn {{ $reviewStatus === $statusValue ? 'btn-primary' : 'btn-secondary' }}"
                     wire:click="$set('reviewStatus', '{{ $statusValue }}')">{{ __($statusValue) }}</button>
                 @endforeach
             </div>
@@ -538,12 +531,39 @@
             @error('reviewComment') <span class="form-error">{{ $message }}</span> @enderror
         </div>
         <div class="form-field" style="border-top:1px solid var(--border); padding-top:14px;">
+            <label>{{ __('Attached documents') }}</label>
+            @if (count($reviewingDocuments) === 0)
+            <p style="opacity:.6;">{{ __('No documents attached') }}</p>
+            @else
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                @foreach ($reviewingDocuments as $document)
+                <div class="file-chip" style="flex-direction:column; align-items:stretch; gap:8px;">
+                    <span class="file-chip-name">{{ $document['originalName'] }} ({{ $document['sizeKb'] }} KB)</span>
+                    <div style="display:flex; gap:8px;">
+                        <a href="{{ route('requests.request.attachment-preview', ['fileId' => $document['id']]) }}"
+                           target="_blank"
+                           class="btn btn-secondary"
+                           style="text-decoration:none; flex:1; justify-content:center;">
+                            {{ __('Preview') }}
+                        </a>
+                        <a href="{{ route('requests.request.attachment-download', ['fileId' => $document['id']]) }}"
+                           class="btn btn-primary"
+                           style="text-decoration:none; flex:1; justify-content:center;">
+                            {{ __('Download') }}
+                        </a>
+                    </div>
+                </div>
+                @endforeach
+            </div>
+            @endif
+        </div>
+        <div class="form-field">
             <label for="reviewDocumentType">{{ __('Document type') }}</label>
             <input type="text" id="reviewDocumentType" wire:model="reviewDocumentType" class="{{ $errors->has('reviewDocumentType') ? 'has-error' : '' }}">
             @error('reviewDocumentType') <span class="form-error">{{ $message }}</span> @enderror
         </div>
         <div class="form-field">
-            <label for="reviewDocumentFile">{{ __('Attach a document') }} <span style="opacity:.6;">({{ __('PDF or image, max. 5MB') }})</span></label>
+            <label for="reviewDocumentFile">{{ __('Attach a document') }} <span style="opacity:.6;">({{ __('PDF or image, max. 10MB') }})</span></label>
             @if ($reviewDocumentFile && ! $errors->has('reviewDocumentFile'))
                 <div class="file-chip">
                     <span class="file-chip-name">{{ $reviewDocumentFile->getClientOriginalName() }}</span>

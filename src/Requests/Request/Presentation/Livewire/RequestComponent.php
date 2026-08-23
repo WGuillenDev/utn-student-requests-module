@@ -93,6 +93,17 @@ class RequestComponent extends Component
 
     public $reviewDocumentFile = null;
 
+    /**
+     * The review modal's own read-only "Adjuntos" list — same shape as
+     * $viewingRequest['documents'], populated by openReviewModal() so
+     * Docencia can see what's already attached before deciding whether
+     * to add another document, without needing the separate detail
+     * modal open at the same time.
+     *
+     * @var array<int, array{id: int, documentType: string, originalName: string, sizeKb: int}>
+     */
+    public array $reviewingDocuments = [];
+
     public ?int $reviewingId = null;
 
     public string $reviewStatus = '';
@@ -225,17 +236,7 @@ class RequestComponent extends Component
             'precedentResolution' => $request->validationPrecedentId() !== null
                 ? ValidationPrecedentModel::query()->find($request->validationPrecedentId())?->resolution_number
                 : null,
-            'documents' => FileModel::query()
-                ->where('fileable_type', RequestModel::class)
-                ->where('fileable_id', $request->id())
-                ->get(['id', 'document_type', 'original_name', 'size_bytes'])
-                ->map(fn (FileModel $file) => [
-                    'id' => $file->id,
-                    'documentType' => $file->document_type,
-                    'originalName' => $file->original_name,
-                    'sizeKb' => (int) round($file->size_bytes / 1024),
-                ])
-                ->all(),
+            'documents' => $this->documentsFor($request->id()),
             'studentRecord' => $this->studentRecord($request->studentId()),
             'canReview' => Auth::user()->can('review', $request) && ! $request->isFinal(),
         ];
@@ -251,6 +252,30 @@ class RequestComponent extends Component
         $this->resetValidation();
 
         $this->showViewModal = true;
+    }
+
+    /**
+     * Shared by openViewModal()/openReviewModal()/uploadReviewDocument()
+     * — both modals now show the same attachment list (the review modal
+     * gained its own read-only "Adjuntos" section alongside the new
+     * upload form), so this stays a single query instead of two copies
+     * drifting apart.
+     *
+     * @return array<int, array{id: int, documentType: string, originalName: string, sizeKb: int}>
+     */
+    private function documentsFor(int $requestId): array
+    {
+        return FileModel::query()
+            ->where('fileable_type', RequestModel::class)
+            ->where('fileable_id', $requestId)
+            ->get(['id', 'document_type', 'original_name', 'size_bytes'])
+            ->map(fn (FileModel $file) => [
+                'id' => $file->id,
+                'documentType' => $file->document_type,
+                'originalName' => $file->original_name,
+                'sizeKb' => (int) round($file->size_bytes / 1024),
+            ])
+            ->all();
     }
 
     /**
@@ -437,6 +462,7 @@ class RequestComponent extends Component
             : null;
         $this->reviewDocumentType = '';
         $this->reviewDocumentFile = null;
+        $this->reviewingDocuments = $this->documentsFor($id);
         $this->resetValidation();
         $this->showReviewModal = true;
     }
@@ -541,7 +567,13 @@ class RequestComponent extends Component
 
         $this->validate([
             'reviewDocumentType' => ['required', 'string', 'max:150'],
-            'reviewDocumentFile' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            // Same mime allow-list as everywhere else in this module
+            // (WaiverRequestForm/ValidationRequestForm) — bumped to
+            // 10MB to match the more generous of the two existing
+            // limits (the student Validation form's), since Docencia's
+            // own attachments are just as likely to be scanned multi-
+            // page documents.
+            'reviewDocumentFile' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
         ]);
 
         $attachment = $this->storeAttachment($this->reviewDocumentFile, $this->reviewDocumentType);
@@ -549,6 +581,7 @@ class RequestComponent extends Component
 
         $this->reviewDocumentType = '';
         $this->reviewDocumentFile = null;
+        $this->reviewingDocuments = $this->documentsFor($this->reviewingId);
         $this->dispatch('toast', variant: 'success', text: __('Document uploaded.'));
 
         if ($this->showViewModal) {
