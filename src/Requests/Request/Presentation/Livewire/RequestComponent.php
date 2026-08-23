@@ -7,6 +7,7 @@ namespace Src\Requests\Request\Presentation\Livewire;
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
 use App\Infrastructure\Persistence\Eloquent\Documents\Models\FileModel;
 use App\Infrastructure\Persistence\Eloquent\Requests\Models\RequestModel;
+use App\Infrastructure\Persistence\Eloquent\Requests\Models\RequestStatusHistoryModel;
 use App\Infrastructure\Persistence\Eloquent\Requests\Models\ValidationPrecedentModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\AcademicRecordModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
@@ -238,6 +239,7 @@ class RequestComponent extends Component
                 : null,
             'documents' => $this->documentsFor($request->id()),
             'studentRecord' => $this->studentRecord($request->studentId()),
+            'statusHistory' => $this->statusHistoryFor($request->id()),
             'canReview' => Auth::user()->can('review', $request) && ! $request->isFinal(),
         ];
 
@@ -274,6 +276,35 @@ class RequestComponent extends Component
                 'documentType' => $file->document_type,
                 'originalName' => $file->original_name,
                 'sizeKb' => (int) round($file->size_bytes / 1024),
+            ])
+            ->all();
+    }
+
+    /**
+     * "Historial de estados" — every transition ChangeRequestStatusUseCase
+     * has ever recorded for this request, oldest first. `previousStatus`
+     * is null only for a row that doesn't exist yet today: nothing in
+     * this module writes a status-history row at creation time (only
+     * Docencia's later reviews go through ChangeRequestStatusUseCase),
+     * so in practice every row here has both a previous and a new
+     * status — the null case is handled in the view purely so this
+     * doesn't silently misrender if/when that changes.
+     *
+     * @return array<int, array{previousStatus: ?string, newStatus: string, comment: ?string, changedBy: string, createdAt: ?string}>
+     */
+    private function statusHistoryFor(int $requestId): array
+    {
+        return RequestStatusHistoryModel::query()
+            ->where('request_id', $requestId)
+            ->with('user:id,name')
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn (RequestStatusHistoryModel $entry) => [
+                'previousStatus' => $entry->previous_status,
+                'newStatus' => $entry->new_status,
+                'comment' => $entry->comment,
+                'changedBy' => $entry->user_id === null ? __('System') : $entry->user->name,
+                'createdAt' => $entry->created_at?->format('d/m/Y H:i'),
             ])
             ->all();
     }

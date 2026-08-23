@@ -274,6 +274,37 @@
                     default => 'pending',
                 } }}">{{ __($viewingRequest['status']) }}</span>
         </x-slot:titleExtra>
+        @php
+            $progressInTramite = $viewingRequest['status'] !== 'Pending Review' || count($viewingRequest['statusHistory']) > 0;
+            $progressResolved = in_array($viewingRequest['status'], ['Approved', 'Denied'], true);
+            $progressThirdLabel = match ($viewingRequest['status']) {
+                'Approved' => __('Approved'),
+                'Denied' => __('Denied'),
+                default => __('Approved').' / '.__('Denied'),
+            };
+            $progressThirdColor = match ($viewingRequest['status']) {
+                'Approved' => 'var(--badgeCustomText)',
+                'Denied' => 'var(--actionDeleteText)',
+                default => 'var(--textMuted)',
+            };
+        @endphp
+        <div class="form-field">
+            <label>{{ __('Request progress') }}</label>
+            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                <span style="display:flex; align-items:center; gap:6px; font-size:13px;">
+                    <span style="width:8px; height:8px; border-radius:50%; background:var(--badgeCustomText); flex-shrink:0;"></span>
+                    {{ __('Received') }}
+                </span>
+                <span style="display:flex; align-items:center; gap:6px; font-size:13px; opacity:{{ $progressInTramite ? '1' : '.45' }};">
+                    <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{{ $progressInTramite ? 'var(--badgeCustomText)' : 'var(--textMuted)' }};"></span>
+                    {{ __('In progress') }}
+                </span>
+                <span style="display:flex; align-items:center; gap:6px; font-size:13px; opacity:{{ $progressResolved ? '1' : '.45' }};">
+                    <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{{ $progressResolved ? $progressThirdColor : 'var(--textMuted)' }};"></span>
+                    {{ $progressThirdLabel }}
+                </span>
+            </div>
+        </div>
         @if ($viewingRequest['type'] === 'Requirement Waiver')
         <div class="form-field">
             <label>{{ __('Student') }}</label>
@@ -406,6 +437,27 @@
                             {{ __('Download') }}
                         </a>
                     </div>
+                </div>
+                @endforeach
+            </div>
+            @endif
+        </div>
+        <div class="form-field">
+            <label>{{ __('Status history') }}</label>
+            @if (count($viewingRequest['statusHistory']) === 0)
+            <p style="opacity:.6;">{{ __('No status changes recorded yet.') }}</p>
+            @else
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                @foreach ($viewingRequest['statusHistory'] as $entry)
+                <div style="border-left:2px solid var(--border); padding-left:10px;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="font-size:13px;">{{ $entry['previousStatus'] ? __($entry['previousStatus']) : __('(new)') }} → {{ __($entry['newStatus']) }}</span>
+                        <span class="status-badge neutral" style="font-size:11px;">{{ $entry['changedBy'] }}</span>
+                    </div>
+                    <span style="font-size:11.5px; opacity:.5;">{{ $entry['createdAt'] }}</span>
+                    @if ($entry['comment'])
+                    <p style="font-size:12.5px; opacity:.7; margin:4px 0 0;">{{ $entry['comment'] }}</p>
+                    @endif
                 </div>
                 @endforeach
             </div>
