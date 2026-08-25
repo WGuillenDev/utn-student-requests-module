@@ -118,12 +118,17 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
 
     public function existsApprovedWaiver(int $studentId, int $courseId, int $requiredCourseId): bool
     {
+        // Blocks a duplicate submission as soon as Docencia's substantive
+        // decision is made, not only once Registro finalizes it —
+        // otherwise a student could file another request for the same
+        // waiver while one is already approved and just awaiting
+        // Registro's closing step.
         return RequestModel::query()
             ->where('student_id', $studentId)
             ->where('type', 'Requirement Waiver')
             ->where('course_id', $courseId)
             ->where('required_course_id', $requiredCourseId)
-            ->where('status', 'Approved')
+            ->whereIn('status', ['Approved by Docencia', 'Approved by Registro'])
             ->exists();
     }
 
@@ -152,8 +157,10 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
                 'Pending Review' => __('Pending Review'),
                 'In Review' => __('In Review'),
                 'Verified by Registro' => __('Verified by Registro'),
-                'Approved' => __('Approved'),
-                'Denied' => __('Denied'),
+                'Approved by Docencia' => __('Approved by Docencia'),
+                'Denied by Docencia' => __('Denied by Docencia'),
+                'Approved by Registro' => __('Approved by Registro'),
+                'Denied by Registro' => __('Denied by Registro'),
             ])->filter(fn (string $label): bool => stripos($label, $search) !== false)->keys()->all();
 
             $searchDate = \DateTime::createFromFormat('Y-m-d', $search);

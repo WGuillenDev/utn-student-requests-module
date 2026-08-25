@@ -57,13 +57,13 @@
             <span>
                 @php $status = $request->status(); @endphp
                 <span class="status-badge {{ match(true) {
-                        $status === 'Approved' => 'positive',
-                        $status === 'Denied' => 'negative',
+                        in_array($status, ['Approved by Docencia', 'Approved by Registro'], true) => 'positive',
+                        in_array($status, ['Denied by Docencia', 'Denied by Registro'], true) => 'negative',
                         $status === 'Pending Review' => 'pending',
                         default => '',
                     } }}">{{ __($status) }}</span>
             </span>
-            <span>{{ $request->estimatedResolutionDate() ?? '—' }}</span>
+            <span>{{ $request->createdAt() ? date('Y-m-d', strtotime($request->createdAt())) : '—' }}</span>
             <div class="actions-cell">
                 <x-ui.row-actions
                     :can-view="Auth::user()->can('view', $request)"
@@ -267,22 +267,25 @@
         @if ($viewingRequest)
         <x-slot:titleExtra>
             <span class="status-badge {{ match(true) {
-                    $viewingRequest['status'] === 'Approved' => 'positive',
-                    $viewingRequest['status'] === 'Denied' => 'negative',
+                    in_array($viewingRequest['status'], ['Approved by Docencia', 'Approved by Registro'], true) => 'positive',
+                    in_array($viewingRequest['status'], ['Denied by Docencia', 'Denied by Registro'], true) => 'negative',
                     default => 'pending',
                 } }}">{{ __($viewingRequest['status']) }}</span>
         </x-slot:titleExtra>
         @php
             $progressInTramite = $viewingRequest['status'] !== 'Pending Review' || count($viewingRequest['statusHistory']) > 0;
-            $progressResolved = in_array($viewingRequest['status'], ['Approved', 'Denied'], true);
+            // Only Registro's final status closes the request — Docencia's
+            // own decision ('Approved by Docencia'/'Denied by Docencia')
+            // still shows as "in progress", not "resolved".
+            $progressResolved = in_array($viewingRequest['status'], ['Approved by Registro', 'Denied by Registro'], true);
             $progressThirdLabel = match ($viewingRequest['status']) {
-                'Approved' => __('Approved'),
-                'Denied' => __('Denied'),
+                'Approved by Registro' => __('Approved'),
+                'Denied by Registro' => __('Denied'),
                 default => __('Approved').' / '.__('Denied'),
             };
             $progressThirdColor = match ($viewingRequest['status']) {
-                'Approved' => 'var(--badgeCustomText)',
-                'Denied' => 'var(--actionDeleteText)',
+                'Approved by Registro' => 'var(--badgeCustomText)',
+                'Denied by Registro' => 'var(--actionDeleteText)',
                 default => 'var(--textMuted)',
             };
         @endphp
@@ -360,17 +363,23 @@
                     <button type="button" class="btn btn-secondary" wire:click="saveExternalCourseData" wire:loading.attr="disabled" wire:target="saveExternalCourseData">{{ __('Save external course data') }}</button>
                     @endif
                 </div>
+                @if ($externalCourseDataSaved)
+                <span class="form-success" style="display:flex; align-items:center; gap:5px;">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    {{ __('Saved successfully') }}
+                </span>
+                @endif
 
                 <div>
                     <span style="font-size:12px; opacity:.6;">{{ __('Resolution') }}</span>
                     <p style="margin:2px 0 0;">
                         <span class="status-badge {{ match(true) {
-                                $viewingRequest['status'] === 'Approved' => 'positive',
-                                $viewingRequest['status'] === 'Denied' => 'negative',
+                                in_array($viewingRequest['status'], ['Approved by Docencia', 'Approved by Registro'], true) => 'positive',
+                                in_array($viewingRequest['status'], ['Denied by Docencia', 'Denied by Registro'], true) => 'negative',
                                 default => 'pending',
                             } }}">{{ match(true) {
-                                $viewingRequest['status'] === 'Approved' => __('Recognized'),
-                                $viewingRequest['status'] === 'Denied' => __('Not recognized'),
+                                in_array($viewingRequest['status'], ['Approved by Docencia', 'Approved by Registro'], true) => __('Recognized'),
+                                in_array($viewingRequest['status'], ['Denied by Docencia', 'Denied by Registro'], true) => __('Not recognized'),
                                 default => __('Pending'),
                             } }}</span>
                     </p>
@@ -383,8 +392,8 @@
                     @error('reviewComment') <span class="form-error">{{ $message }}</span> @enderror
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button type="button" class="btn btn-primary" wire:click="changeStatus('Approved')" wire:loading.attr="disabled" wire:target="changeStatus">{{ __('Recognize') }}</button>
-                    <button type="button" class="btn btn-orange" wire:click="changeStatus('Denied')" wire:loading.attr="disabled" wire:target="changeStatus">{{ __('Do not recognize') }}</button>
+                    <button type="button" class="btn btn-primary" wire:click="changeStatus('Approved by Docencia')" wire:loading.attr="disabled" wire:target="changeStatus">{{ __('Recognize') }}</button>
+                    <button type="button" class="btn btn-orange" wire:click="changeStatus('Denied by Docencia')" wire:loading.attr="disabled" wire:target="changeStatus">{{ __('Do not recognize') }}</button>
                 </div>
                 @endif
             </div>
@@ -410,20 +419,33 @@
             <label>{{ __('New status') }}</label>
             <div style="display:flex; flex-wrap:wrap; gap:8px;">
                 {{--
-                    Course Validation reaches Approved via "Reconocer" in
-                    the "Cursos a convalidar" table above instead, so it
-                    doesn't get its own button here — Requirement Waiver
-                    has no such alternate path, so it keeps a 5th
-                    "Aprobada" button. Each button commits immediately
-                    (calls changeStatus() directly, same one-click
-                    pattern as Reconocer/No reconocer) instead of staging
-                    a value for a separate "Confirmar" — there's no
-                    modal footer here to hold that second step anymore.
+                    Two mutually exclusive button sets, not a shared row —
+                    each viewer only sees the statuses that belong to
+                    their own stage of the pipeline, per
+                    $viewingRequest['canFinalize'] (openViewModal()):
+                    Docencia (holds 'review' but not 'finalize') gets
+                    Pending Review / In Review / its own Aprobada-Denegada
+                    pair; Registro (holds 'finalize') gets only the three
+                    "by Registro" statuses. Course Validation reaches
+                    "Aprobada por Docencia" via "Reconocer" in the
+                    "Cursos a convalidar" table above instead, so it
+                    doesn't get its own button in Docencia's set —
+                    Requirement Waiver has no such alternate path, so it
+                    keeps its own button there. Each button commits
+                    immediately (calls changeStatus() directly, same
+                    one-click pattern as Reconocer/No reconocer) instead
+                    of staging a value for a separate "Confirmar" —
+                    there's no modal footer here to hold that second step
+                    anymore.
                 --}}
-                @foreach (($reviewingType === 'Validation'
-                    ? ['Pending Review', 'Verified by Registro', 'In Review', 'Denied']
-                    : ['Pending Review', 'Verified by Registro', 'In Review', 'Approved', 'Denied']
-                ) as $statusValue)
+                @php
+                    $statusOptions = $viewingRequest['canFinalize']
+                        ? ['Verified by Registro', 'Approved by Registro', 'Denied by Registro']
+                        : ($reviewingType === 'Validation'
+                            ? ['Pending Review', 'In Review', 'Denied by Docencia']
+                            : ['Pending Review', 'In Review', 'Approved by Docencia', 'Denied by Docencia']);
+                @endphp
+                @foreach ($statusOptions as $statusValue)
                 <button type="button"
                     class="btn {{ $reviewStatus === $statusValue ? 'btn-primary' : 'btn-secondary' }}"
                     wire:click="changeStatus('{{ $statusValue }}')"
@@ -468,7 +490,7 @@
                     <span class="file-chip-name">{{ $document['originalName'] }} ({{ $document['sizeKb'] }} KB)</span>
                     <div style="display:flex; gap:8px;">
                         <a href="{{ route('requests.request.attachment-preview', ['fileId' => $document['id']]) }}"
-                           target="_blank"
+                           @click.prevent="window.open($el.href, 'documentPreview', 'width=900,height=750,resizable=yes,scrollbars=yes,noopener,noreferrer')"
                            class="btn btn-secondary"
                            style="text-decoration:none; flex:1; justify-content:center;">
                             {{ __('Preview') }}

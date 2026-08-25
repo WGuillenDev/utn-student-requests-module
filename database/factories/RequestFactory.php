@@ -47,7 +47,7 @@ class RequestFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'engine_result' => 'Automatically Approved',
-            'status' => 'Approved',
+            'status' => 'Approved by Registro',
         ]);
     }
 

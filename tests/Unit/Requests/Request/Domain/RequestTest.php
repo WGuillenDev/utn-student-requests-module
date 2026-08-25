@@ -39,9 +39,9 @@ final class RequestTest extends TestCase
     {
         $request = Request::create(studentId: 1, type: 'Requirement Waiver', courseId: 10);
 
-        $request->changeStatus('Approved', reviewerId: 99);
+        $request->changeStatus('Approved by Registro', reviewerId: 99);
 
-        $this->assertSame('Approved', $request->status());
+        $this->assertSame('Approved by Registro', $request->status());
         $this->assertSame(99, $request->reviewerId());
         $this->assertTrue($request->isFinal());
     }
@@ -65,7 +65,7 @@ final class RequestTest extends TestCase
             reviewerId: 42,
         );
 
-        $request->changeStatus('Approved');
+        $request->changeStatus('Approved by Registro');
 
         // reviewerId is only overwritten when a new one is explicitly
         // passed — an editor re-saving without changing the assigned
@@ -96,7 +96,7 @@ final class RequestTest extends TestCase
 
         // Resolved requests cannot be reopened — the invariant applies
         // even when the "new" status is the same as the current one.
-        $request->changeStatus($finalStatus === 'Approved' ? 'Denied' : 'Approved');
+        $request->changeStatus($finalStatus === 'Approved by Registro' ? 'Denied by Registro' : 'Approved by Registro');
     }
 
     /**
@@ -105,8 +105,8 @@ final class RequestTest extends TestCase
     public static function finalStatusProvider(): array
     {
         return [
-            'Approved' => ['Approved'],
-            'Denied' => ['Denied'],
+            'Approved by Registro' => ['Approved by Registro'],
+            'Denied by Registro' => ['Denied by Registro'],
         ];
     }
 
@@ -118,7 +118,7 @@ final class RequestTest extends TestCase
             id: 1, studentId: 1, type: 'Requirement Waiver', courseId: 10,
             requiredCourseId: null, waiverJustification: null, originInstitution: null, externalCourse: null,
             validationPrecedentId: null, engineResult: null, violatedRuleId: null,
-            status: 'Approved', estimatedResolutionDate: null, reviewerId: null,
+            status: 'Approved by Registro', estimatedResolutionDate: null, reviewerId: null,
         );
 
         $request->assignEstimatedResolutionDate('2026-09-01');
@@ -164,7 +164,7 @@ final class RequestTest extends TestCase
             id: 1, studentId: 1, type: 'Requirement Waiver', courseId: 10,
             requiredCourseId: null, waiverJustification: null, originInstitution: null, externalCourse: null,
             validationPrecedentId: null, engineResult: null, violatedRuleId: null,
-            status: 'Approved', estimatedResolutionDate: null, reviewerId: null,
+            status: 'Approved by Registro', estimatedResolutionDate: null, reviewerId: null,
             createdAt: $createdAt->format('Y-m-d H:i:s'),
         );
 

@@ -1088,3 +1088,220 @@ No se editaron las migraciones `2026_08_21_194439` ni `2026_08_22_190000` para "
 Un guard `if (driver !== 'sqlite')` alrededor de SQL crudo evita el error de sintaxis inmediato, pero no es lo mismo que "la migración funciona en SQLite" — sencillamente no hace nada ahí, y ese vacío solo se manifiesta más tarde, en el primer intento de escribir un valor que el guard nunca llegó a habilitar. La lección de fondo, ya aprendida una vez con el bug del `MODIFY` en la entrada del 21 de agosto y repetida aquí: cuando una migración necesita tocar un enum/CHECK constraint de forma que funcione en más de un motor de base de datos, la API fluida de Laravel (`change()`) es la herramienta correcta desde el principio — el SQL crudo por motor es lo que obliga a ir parchando driver por driver cada vez que aparece un caso nuevo.
 
 ---
+
+## Entrada — 25 de agosto de 2026 (correo real de demo y cambio del disparador de notificación de ES-03)
+**Tema:** Configurar el envío real de correo (SMTP de Gmail) para una demo en vivo frente al docente, y cambiar cuándo se dispara la notificación de ES-03: de "en cada cambio de estado" a "solo al enviar la solicitud", como confirmación de recepción
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso a la base de datos real (MySQL) y al servidor SMTP para pruebas de envío reales
+
+---
+
+### 1. Qué se le consultó a la IA
+
+En una sesión con varios pasos sucesivos: (1) insertar el correo real del usuario en la base de datos para que la notificación de una demo en vivo llegara a su bandeja; (2) configurar `.env` para que el correo saliera de verdad (no solo quedara en el log); (3) tras probarlo, reportar que enviar una solicitud de convalidación no generaba ninguna notificación; (4) pedir explícitamente que el correo notifique **solo** en el momento en que el estudiante envía la solicitud —como confirmación de que se recibió con éxito— y no en cada cambio de estado como estaba diseñado originalmente; (5) implementar ese cambio directamente y documentar la sesión en este diario.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Antes de tocar la base de datos, revisó el código de `EloquentRequestNotifier` y confirmó que el destinatario del correo es `$student->user->email` — es decir, el mismo campo `users.email` que Fortify usa como identificador de login. No existe un campo separado para "correo de notificación". Esto se documentó explícitamente al usuario antes de escribir el `UPDATE`, aunque su efecto colateral (invalidar la credencial de login vieja) solo se hizo evidente después, cuando el usuario reportó no poder entrar con `estudianteISW@gmail.com`.
+2. Verificó contra la base de datos real (no contra `TestDataSeeder.php`, que resultó desactualizado) cuál era el usuario "estudiante" real vinculado a un `StudentModel`: el seeder de fixtures busca un usuario `estudiante@gmail.com` que no existe en esta base de datos (el real es `estudianteISW@gmail.com`, id 3), por lo que ese bloque de `TestDataSeeder::seedWaiverEngineFixtures()` nunca se ejecuta contra los datos actuales — hallazgo colateral, fuera de alcance de esta sesión, no corregido aquí.
+3. Antes de asumir que la falta de notificación al convalidar era un bug, leyó `ChangeRequestStatusUseCase` y `CreateRequestUseCase`: confirmó que `notifyStatusChanged()` solo se invocaba desde el primero, nunca desde el segundo. Es decir, el comportamiento reportado por el usuario era el diseño original documentado en la entrada del 14 de agosto (ES-03 dice literalmente "en cada cambio de estado"), no un defecto.
+4. Detectó, revisando `.env`, que `MAIL_MAILER=log` y `QUEUE_CONNECTION=database` — con esa configuración ningún correo real habría salido nunca, sin importar qué tan bien estuviera la lógica de negocio. Lo señaló de forma proactiva, antes de que fallara en vivo frente al docente.
+5. Ante la petición de "solo notificar al enviar", señaló explícitamente la tensión con el texto literal de ES-03 ("en cada cambio de estado") y presentó dos caminos: agregar la confirmación de envío sin quitar la de cambio de estado (más fiel al spec) o reemplazar una por la otra. No decidió por su cuenta cuál aplicar.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- Actualizar el `email` del usuario de prueba (`estudianteISW@gmail.com`, id 3) directamente en la base de datos vía `php artisan tinker` — un cambio de **dato**, no de código fuente del proyecto, por lo que no requería la autorización especial de [[feedback_workflow]].
+- La configuración de `.env` (`MAIL_MAILER=smtp`, host/puerto de Gmail, `QUEUE_CONNECTION=sync` para envío inmediato en la demo), incluyendo la contraseña de aplicación de Gmail proporcionada directamente por el usuario.
+- **La opción "reemplazar"**, elegida explícitamente por el equipo tras ver el trade-off planteado por la IA: se prioriza la confirmación de recepción para el estudiante sobre el texto literal de ES-03. Queda registrado aquí como desviación consciente del spec, no como un olvido, para que el equipo pueda defenderla en la exposición oral si el docente pregunta por qué no hay correo en los cambios de estado.
+- El código de los 5 archivos modificados (`RequestNotifierInterface`, la nueva `RequestSubmittedNotification`, `EloquentRequestNotifier`, `CreateRequestUseCase`, `ChangeRequestStatusUseCase`), con autorización explícita del equipo ("hazlo tú") — desviación puntual de la regla por defecto de [[feedback_workflow]], igual que las autorizadas en sesiones anteriores.
+- Eliminar por completo la clase `RequestStatusChangedNotification.php` en vez de dejarla sin usar, una vez confirmado (por búsqueda en todo el repo) que ningún otro archivo la referenciaba.
+
+### 4. Qué se rechazó y por qué
+
+- Se rechazó la opción que la IA señaló como más fiel al spec (agregar sin quitar) — decisión de negocio del equipo, no un error de la IA; quedó documentada la razón (priorizar la confirmación al estudiante) para la defensa oral.
+- Se rechazó dar por buena la primera prueba de correo real solo porque "llegó" — el equipo revisó el contenido real recibido y encontró que estaba en inglés pese a que el proyecto está configurado en español (`APP_LOCALE=es`), y pidió corregirlo antes de aceptar el cambio como terminado.
+
+### 5. Qué hubo que corregir o verificar manualmente — el error real de la IA
+
+El primer correo de prueba (`RequestSubmittedNotification`) llegó a la bandeja real del usuario **en inglés**, aunque el proyecto usa `lang/es.json` para traducir todos los textos vía `__()` y ya tenía traducciones para los mensajes equivalentes de la notificación vieja. La IA escribió los strings literales nuevos ("We received your :type", "We successfully received your :type for :course.", "Current status: :status") sin agregar sus entradas correspondientes a `lang/es.json` antes de probar — un descuido real, detectado por el usuario al leer el correo recibido, no por la IA de forma proactiva antes de enviarlo.
+
+Se corrigió agregando las 3 claves nuevas a `lang/es.json` y, en el mismo cambio, eliminando las 5 claves que quedaron huérfanas tras borrar `RequestStatusChangedNotification` (`Your :type is now :status`, `The status of your :type for :course has changed.`, `Previous status: :status`, `New status: :status`, `Estimated resolution date: :date`) — verificado con una búsqueda en todo el repositorio, antes de borrarlas, de que ningún otro archivo PHP las usaba.
+
+También se verificó, con datos reales y no solo lectura de código:
+- Dos envíos de prueba end-to-end contra el SMTP real de Gmail (vía `php artisan tinker` llamando directamente a `CreateRequestUseCase`), el primero confirmando el bug de idioma y el segundo confirmando la corrección — el usuario leyó el contenido real de ambos correos recibidos antes de aceptar el cambio.
+- `php artisan test` (54/56) tras el cambio, y con `git log` sobre los 2 archivos de las pruebas que fallan, que ninguno de los dos fue tocado en esta sesión — confirmando que las fallas son preexistentes y no una regresión introducida aquí.
+- Se limpiaron (`DELETE`) las 2 solicitudes de prueba creadas para disparar los correos, para no dejar datos de prueba visibles en la bandeja de Docencia durante la demo real frente al docente.
+
+### 6. Qué se aprendió del proceso
+
+- Cuando un mismo campo de base de datos cumple dos roles (aquí, `users.email` como login *y* como destinatario de notificaciones), cambiarlo para un propósito tiene un efecto colateral silencioso en el otro. Vale la pena, la próxima vez, señalar *ambos* usos del campo *antes* de escribir el `UPDATE`, no solo el que motivó el cambio — se habría evitado que el usuario quedara bloqueado tratando de iniciar sesión con la credencial vieja.
+- Agregar una clase de notificación nueva con strings en inglés no es suficiente en un proyecto con archivo de traducciones central (`lang/es.json`): cada string literal nuevo pasado a `__()` necesita su propia entrada, y la única forma confiable de comprobar que no falta ninguna es leer el correo real recibido, no solo que el código "compila" o que el envío no lanzó una excepción.
+- Frente a una petición que se aleja del texto literal del spec (ES-03: "en cada cambio de estado"), señalar la tensión y las dos alternativas — sin aplicar ninguna hasta que el equipo elija — permitió que la decisión quedara documentada como consciente, con su razón, en vez de aparecer como una desviación no explicada si el docente la nota en la defensa oral.
+- Verificar un cambio de notificaciones por correo enviando correos reales (SMTP real, bandeja real) en vez de `Mail::fake()` fue lo que expuso tanto el bug de idioma como la confirmación final — para este tipo de cambio, la prueba automatizada no sustituye leer el correo tal como lo recibiría el usuario final.
+
+---
+
+## Entrada — 25 de agosto de 2026 (continuación: el contador de Aprobado/Reprobado/Acreditadas/Créditos no se actualizaba al aprobar una solicitud)
+**Tema:** Diagnóstico y corrección de que el resumen del expediente del estudiante (Aprobado/Reprobado/Acreditadas y Créditos), visible al final del detalle de una solicitud en el perfil de Docencia, nunca cambiaba después de que Docencia aprobara una solicitud
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso a la base de datos real para pruebas
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Se reportó, de forma coloquial: en el perfil de Docencia, al final del detalle de una solicitud, en la sección de "Aprobado/Reprobado/Acreditadas y Créditos", el contador debería cambiar después de que Docencia cambie el estado de la solicitud — debería "registrar" ese cambio.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Localizó el panel descrito (`request-component.blade.php:593-597`) y confirmó que **sí** es dinámico: `RequestComponent::studentRecord()` lee en vivo la tabla `academic_records` del estudiante y calcula los conteos de aprobado/reprobado/acreditado y créditos ganados/totales a partir de esas filas — no es un valor estático.
+2. Antes de asumir que el bug estaba en el cálculo del resumen, revisó qué escribe en `academic_records` cuando Docencia aprueba una solicitud: **nada**. Ni `ChangeRequestStatusUseCase` ni ningún otro caso de uso tocan esa tabla.
+3. Encontró que los estados `'Credited by Validation'` y `'Requirement Waived'` ya existen en el `enum` de la migración de `academic_records` (`2026_08_07_100007_create_academic_records_table.php`) y ya son reconocidos tanto por el resumen (`RequestComponent::PROGRESS_STATUSES`/`CREDITED_STATUSES`) como por el propio motor de reglas de ES-01 (`EloquentStudentAcademicProfileRepository::PROGRESS_STATUSES`, usado por `countApprovedCourses()`) — es decir, el sistema ya sabe **leer** e interpretar esos dos estados como progreso académico, pero ningún código los **produce**. Confirmó, con una consulta directa a la base de datos antes de escribir nada, que ninguna fila de `academic_records` con esos dos estados existía en la base real.
+4. Concluyó que se trata de una funcionalidad nunca conectada (mismo patrón que el motor de reglas de ES-01 antes de la entrada del 14 de agosto), no un bug de cálculo — y lo presentó como tal antes de proponer una corrección.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- El diagnóstico completo antes de tocar código.
+- El diseño del puerto nuevo (`AcademicRecordRegistrarInterface::registerCredit(Request $request)`) y su adaptador Eloquent (`EloquentAcademicRecordRegistrar`), siguiendo el mismo patrón Hexagonal ya establecido para `RequestNotifierInterface`/`EloquentRequestNotifier` — Domain solo conoce la interfaz y la entidad `Request`, la traducción a un estado concreto de `academic_records` vive en Infrastructure.
+- La regla de mapeo: `'Requirement Waiver'` → `'Requirement Waived'`; `'Validation'` → `'Credited by Validation'`, aplicada sobre `courseId()` de la solicitud (el curso objetivo, no el prerequisito) y usando `updateOrCreate` por `(student_id, course_id)` para no duplicar filas si una solicitud posterior vuelve a tocar el mismo curso.
+- Enlazar el `equivalence_id` de la nueva fila de `academic_records` al `id` de la propia solicitud que originó el crédito — no existía ningún otro dato con qué llenar esa columna (comentada en su migración como "Reference resolution for the credit"), y deja trazabilidad de qué solicitud generó cada crédito.
+- Disparar el registro únicamente cuando `$newStatus === 'Approved'`, apoyándose en el invariante ya existente de `Request::changeStatus()` (un estado `Approved` es final e irreversible) para no necesitar ninguna comprobación adicional contra el estado anterior.
+- El código de los 4 archivos (interfaz, adaptador, binding en `DomainServiceProvider`, y la llamada en `ChangeRequestStatusUseCase`), con autorización explícita ("hazlo tú").
+
+### 4. Qué se rechazó y por qué
+
+- No se propuso ni se aplicó ningún cambio a `requiredCourseId` de la solicitud de tipo `Requirement Waiver` — el usuario solo pidió que el contador reflejara el cambio de estado de la solicitud aprobada, no rediseñar qué pasa con el curso prerrequisito, que ya debía tener su propio registro de "Aprobado" desde antes (es la evidencia que el motor de reglas evaluó para conceder la dispensa).
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- Se probaron ambos flujos de punta a punta contra la base de datos real (no solo lectura de código): crear una solicitud de Convalidación → aprobarla como Docencia → confirmar que apareció una fila `academic_records` con `status = 'Credited by Validation'`; y lo mismo para una solicitud de Levantamiento de Requisito, confirmando `status = 'Requirement Waived'`. Ambas pruebas se limpiaron después (`DELETE`) para no dejar datos de prueba en la base real.
+- Durante la segunda prueba (Levantamiento de Requisito) apareció un error de base de datos (`Data truncated for column 'waiver_justification'`) al usar un valor de texto libre para ese campo — la IA verificó con `SHOW COLUMNS` que la columna es en realidad un `ENUM` con 5 valores fijos predefinidos, no texto libre. Esto **no** era un bug del cambio de esta sesión, sino un error de la propia IA al construir el dato de prueba sin revisar antes el esquema real de la columna; se corrigió usando uno de los valores válidos del enum y la prueba pasó.
+- Se corrió `php artisan test` (54/56) después del cambio: mismas 2 fallas preexistentes de sesiones anteriores (confirmadas por `git log` como no tocadas en esta sesión), sin regresiones nuevas.
+
+### 6. Qué se aprendió del proceso
+
+- Un valor de enum reconocido y consumido en varios lugares del código (`PROGRESS_STATUSES` en dos clases distintas) pero nunca producido por ningún caso de uso es una señal fuerte de funcionalidad a medio conectar — vale la pena, ante un reporte de "esto no se actualiza", buscar primero quién *lee* el dato (para confirmar que el cálculo en sí está bien) y después quién *escribe* el dato (que es donde suele estar el hueco real), en ese orden.
+- Cuando dos casos de uso ya comparten un patrón (aquí, `ChangeRequestStatusUseCase` ya inyectaba un puerto de notificación siguiendo Hexagonal), replicar exactamente ese mismo patrón para una necesidad nueva relacionada mantiene el código predecible — no hubo que inventar una convención nueva para esta funcionalidad.
+- Antes de escribir un dato de prueba contra una columna desconocida, revisar su definición real (`SHOW COLUMNS`) evita perder tiempo diagnosticando un error de base de datos que en realidad era un dato de prueba inválido, no un bug del cambio que se estaba verificando.
+
+---
+
+## Entrada — 25 de agosto de 2026 (rol RBAC "Registro")
+**Tema:** Creación del rol y usuario de prueba "Registro", con los mismos permisos que "Coordinadora de Docencia" tiene hoy
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso a la base de datos real
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Se pidió crear un usuario "Registro" con las capacidades actuales de Docencia, y verificar explícitamente que ese usuario fuera capaz de cambiar el estado de una solicitud a "Aprobada".
+
+### 2. Qué encontró la IA antes de actuar
+
+Ante la ambigüedad de si "usuario de Registro" significaba un rol RBAC nuevo o solo un login adicional bajo el rol Docencia ya existente, la IA no asumió ninguna de las dos — se lo preguntó directamente al equipo, señalando que el estado `'Verified by Registro'` ya existente en el pipeline de solicitudes (desde la entrada del 22 de agosto) sugería que "Registro" ya era, de hecho, un actor previsto en el diseño, aunque nunca se le hubiera dado un rol propio.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- La opción de crear un **rol RBAC nuevo** "Registro" (no solo un usuario bajo el rol Docencia), con el mismo conjunto de 13 permisos que Docencia tiene hoy — decisión explícita del equipo tras la pregunta de la IA, no una elegida unilateralmente.
+- El usuario de prueba `registro@gmail.com` / `12345678`, siguiendo el mismo patrón de credenciales que los demás usuarios de `DatabaseSeeder.php`.
+- La verificación explícita, contra la base de datos real (no solo lectura de código), de que el nuevo usuario sí puede cambiar el estado de una solicitud a "Aprobada" — se confirmó con `RequestPolicy::review()`, que autoriza por el permiso `requests.review` y no por nombre de rol, así que cualquier rol con ese permiso queda habilitado automáticamente.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+Ninguna corrección — se verificó de punta a punta (crear solicitud → aprobar como Registro → confirmar `reviewer_id` correcto) contra la base de datos real antes de dar el cambio por terminado.
+
+### 6. Qué se aprendió del proceso
+
+- Un estado ya presente en un `enum` (`'Verified by Registro'`) puede ser evidencia de una decisión de diseño tomada pero nunca completada (ningún rol tenía permiso para usarlo hasta ahora) — vale la pena, al encontrar un valor así, preguntarse qué actor lo iba a usar antes de asumir que es solo un nombre descriptivo sin consecuencia de permisos.
+- Cuando una instrucción del usuario es ambigua entre dos implementaciones con costos muy distintos (un rol RBAC nuevo vs. reutilizar uno existente), preguntar antes de elegir evita tener que deshacer trabajo si la lectura equivocada resulta ser la incorrecta.
+
+---
+
+## Entrada — 25 de agosto de 2026 (estado de aprobación en dos etapas: Docencia → Registro)
+**Tema:** División del estado único "Aprobada"/"Denegada" en dos etapas — la decisión sustantiva de Docencia y el cierre final, exclusivo de Registro
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal, con acceso a la base de datos real para migrar datos existentes
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Se pidió, en una sola instrucción: renombrar el estado "Aprobada" a "Aprobada por Docencia" ("y así sucesivamente"), y que la aprobación *final* de una solicitud fuera un estado nuevo, "Aprobada por Registro", que **solo** el rol Registro pudiera aplicar.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Antes de tocar nada, verificó cuántas solicitudes reales ya estaban en estado `'Approved'` en la base de datos: 6, todas creadas ese mismo día probando la demo — dato crítico porque cualquier cambio de enum sin migrar esas filas las habría dejado en un estado inválido.
+2. Identificó, revisando `RequestPolicy`, que Docencia y Registro comparten hoy exactamente los mismos permisos (`requests.review`) — por lo tanto, la restricción "solo Registro puede dar la aprobación final" pedida por el equipo **no existía todavía** como regla de autorización; hacía falta una nueva, no bastaba con el permiso genérico ya usado para todo lo demás.
+3. Localizó, con una búsqueda exhaustiva de los literales `'Approved'`/`'Denied'` en todo el repositorio, exactamente qué archivos pertenecían al estado de `requests.status` (a renombrar) frente a cuáles pertenecían a enums no relacionados que usan las mismas palabras — `validation_precedents.result` (el resultado de un precedente histórico de convalidación) y `academic_records.status` (que sí incluye `'Approved'`/`'Failed'` pero es un concepto distinto, el expediente académico). Confirmó que ninguno de esos dos debía tocarse, evitando renombrar un enum equivocado.
+4. Revisó las tres migraciones previas que ya habían tocado esta misma columna (`2026_08_21_194439`, `2026_08_22_190000`, `2026_08_23_000000_fix_status_enum_on_sqlite`) para entender el patrón ya aprendido por el equipo: alterar un `ENUM`/`CHECK` en más de un motor de base de datos debe hacerse con `Blueprint::change()`, nunca con SQL crudo por driver — y que remapear datos existentes *antes* de estrechar el enum es obligatorio para no perderlos.
+5. Detectó que remapear datos a los 4 valores nuevos requería primero **ampliar** el enum (para que esos valores nuevos fueran válidos) y solo después **angostarlo** quitando los dos valores viejos — hacerlo al revés habría repetido el mismo error de truncado de datos ya visto en una sesión anterior con la columna `waiver_justification`.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- Los nombres literales elegidos para los 4 estados nuevos (`'Approved by Docencia'`, `'Denied by Docencia'`, `'Approved by Registro'`, `'Denied by Registro'`), siguiendo el mismo patrón ya usado por `'Verified by Registro'` (usar el nombre del rol tal cual, no traducirlo a "Registrar's Office").
+- El nuevo permiso `requests.finalize`, asignado **solo** al rol Registro (nunca a Docencia), como el mecanismo de autorización que hacía falta para la restricción pedida — siguiendo el mismo patrón ya establecido para `requests.review` (un permiso nombrado, no una condición de nombre de rol embebida en la política).
+- Migrar automáticamente las 6 solicitudes ya `'Approved'` a `'Approved by Docencia'` (no directo a `'Approved by Registro'`) — decisión explícita del equipo ante la pregunta de la IA, consistente con que ese paso de Registro no existía cuando esas solicitudes se aprobaron.
+- Que `'Denied'` siguiera el mismo patrón de dos etapas que `'Approved'` — también decisión explícita del equipo ante la pregunta de la IA, no asumida por simetría.
+- Tres decisiones de diseño que la IA tomó sin preguntar, presentadas después como parte del resumen para que el equipo las revisara: (a) la detección de solicitudes duplicadas de un levantamiento bloquea ya desde `'Approved by Docencia'`, no solo desde el cierre final de Registro, para no dejar que un estudiante reenvíe la misma solicitud mientras espera el cierre administrativo; (b) el indicador "Reconocido"/"No reconocido" de Convalidación se ilumina ya en la etapa de Docencia, no hasta que Registro cierre; (c) el "stepper" de progreso solo marca la solicitud como resuelta en la etapa final de Registro.
+
+### 4. Qué se rechazó y por qué
+
+No se rechazó ninguna propuesta de la IA en esta sesión — las tres preguntas de alcance planteadas antes de escribir código (qué pasa con las filas existentes, si Denegada también se parte en dos, si la restricción de autorización debía ser nueva) se resolvieron todas a favor de la opción que la IA marcó como recomendada.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+No hubo errores de la IA que corregir en esta sesión, pero sí una cantidad inusualmente grande de verificación en vivo antes de dar el cambio por terminado, dado que se trata de la máquina de estados central del módulo:
+- Migración de datos ejecutada contra la base de datos real: confirmado con `SHOW COLUMNS` que el nuevo `ENUM` quedó con los 7 valores esperados, y con un `GROUP BY status` que las 6 filas `'Approved'` pasaron a `'Approved by Docencia'` sin perder ninguna.
+- Prueba de autorización en vivo con `Gate::forUser()`: confirmado que Docencia NO puede aplicar `'Approved by Registro'` (se le niega el permiso `finalize`) y que Registro sí puede.
+- Dos flujos completos de punta a punta contra la base de datos real: un Levantamiento de Requisito (crear → Docencia aprueba → intento de duplicado bloqueado correctamente → Registro cierra → fila de `academic_records` creada) y una Convalidación vía "Reconocer" (mismo recorrido) — confirmando que el registro de crédito académico (de la sesión anterior) sigue disparándose correctamente, ahora en el momento correcto (`'Approved by Registro'`, no `'Approved by Docencia'`).
+- Se actualizaron los literales de estado en `RequestTest.php` (suite de dominio) y en `RequestFactory::automaticallyApproved()` para que siguieran probando el invariante real; `php artisan test` se corrió después: 54/56, mismas 2 fallas preexistentes de sesiones anteriores, sin regresiones nuevas.
+- Datos de prueba de las verificaciones en vivo eliminados (`DELETE`) al terminar, para no dejar residuos en la bandeja de Docencia real.
+
+### 6. Qué se aprendió del proceso
+
+- Antes de renombrar un valor de enum, buscarlo en *todo* el repositorio y clasificar cada aparición por a qué tabla pertenece realmente evita el error de tocar un enum de apariencia idéntica pero significado distinto (aquí, tres enums distintos comparten los literales `'Approved'`/`'Denied'`: `requests.status`, `validation_precedents.result`, `academic_records.status`).
+- Cuando un cambio de estado necesita una regla de autorización más fina que la ya existente ("todo el que puede revisar, puede aprobar" → "solo un subconjunto puede cerrar"), el patrón correcto en este proyecto es un permiso nuevo y nombrado (`requests.finalize`), no una condición de nombre de rol dentro de la política — mantiene la autorización basada en permisos, consistente con el resto del sistema.
+- Una migración de `ENUM` que a la vez agrega valores nuevos y quita valores viejos no puede hacerse en un solo `ALTER`: hay que ampliar primero (para que el `UPDATE` de los datos existentes sea válido contra la restricción), remapear los datos, y angostar después — el orden importa tanto como en el bug de `waiver_justification` de una sesión anterior, y es la misma lección aplicada a un caso más grande.
+- En un cambio que toca la máquina de estados central de un módulo (no una funcionalidad aislada), vale la pena verificar cada arista del comportamiento nuevo por separado contra datos reales (autorización, transición, efectos secundarios como el registro de crédito) en lugar de solo confirmar que "la suite de tests sigue en verde" — los tests existentes no cubrían este flujo nuevo, así que pasar en verde no habría sido evidencia suficiente por sí sola.
+
+---
+
+## Entrada — 25 de agosto de 2026 (ajustes finos de UI sobre el flujo Docencia/Registro)
+**Tema:** Tres ajustes puntuales pedidos justo después de implementar el flujo en dos etapas: separar los botones de estado por rol, un check visual de confirmación al guardar datos externos, y la vista previa de documentos como ventana emergente
+**Participantes:** Equipo de desarrollo ISW-521
+**Herramienta consultada:** Claude (Anthropic), vía Claude Code en terminal
+
+---
+
+### 1. Qué se le consultó a la IA
+
+Tres pedidos sucesivos, cada uno tras revisar en el navegador el resultado del cambio anterior: (1) el equipo notó, viendo la pantalla como Docencia, que el botón "Verificada por Registro" seguía apareciendo ahí aunque ese estado es exclusivo de Registro — pidió quitarlo; luego, viendo la pantalla como Registro, notó que también aparecían los botones de Docencia ("Pendiente de revisión", "Aprobada por Docencia", etc.) y pidió que cada perfil viera solo lo que le corresponde; (2) tras preguntar qué hacía el botón "Guardar datos externos", pidió agregar un check verde de "guardado correctamente"; (3) pidió que la vista previa de un documento adjunto abriera en una ventana emergente en lugar de como estaba.
+
+### 2. Qué encontró la IA antes de actuar
+
+1. Para el primer pedido, confirmó que el permiso `requests.finalize` (creado en la entrada anterior) ya era exactamente el mecanismo necesario para distinguir ambos conjuntos de botones — no hacía falta ningún permiso nuevo, solo cambiar la lista de estados de "unión" (base + extra si puede finalizar) a "exclusión mutua" (uno u otro conjunto completo según `canFinalize`). Señaló proactivamente, sin que se preguntara, dos efectos colaterales de este cambio: Registro conserva el permiso `requests.review` además de `finalize`, así que técnicamente aún podría alcanzar los estados de Docencia si alguien forzara la petición directamente (el cambio aplicado es solo de interfaz, no una restricción nueva de backend); y Superadmin, al pasar todas las validaciones de permisos automáticamente, ahora solo vería los 3 botones de Registro en vez del set completo. Ninguno de los dos se resolvió sin preguntar — quedaron señalados para que el equipo decida si hace falta ajustarlos.
+2. Para el segundo pedido, revisó que el proyecto ya tenía una convención visual establecida (`.form-success`, usada para "Archivo adjuntado" en los campos de carga de documentos) y la reutilizó en vez de inventar un estilo nuevo.
+3. Para el tercero, confirmó que solo existía un lugar en todo el proyecto con el enlace de vista previa (`request-component.blade.php`), y que ya usaba Alpine.js en el mismo archivo (`@click` en el acordeón del expediente académico) — así que implementó el popup con `@click.prevent` + `window.open()` en vez de introducir una librería nueva.
+
+### 3. Qué se aceptó de la respuesta de la IA
+
+- La separación de los botones de estado en dos conjuntos mutuamente excluyentes (Docencia vs. Registro) según `$viewingRequest['canFinalize']`.
+- El check verde reutilizando `.form-success`, con una propiedad Livewire nueva (`$externalCourseDataSaved`) que se resetea automáticamente si el código o los créditos externos se vuelven a editar, para que el check nunca quede mostrando "guardado" sobre datos sin guardar.
+- La vista previa como ventana emergente de 900×750px vía `window.open()`, conservando el `href` del enlace para que un clic central o "abrir en pestaña nueva" manual del usuario siga funcionando.
+
+### 4. Qué se rechazó y por qué
+
+Ninguno de los tres cambios fue rechazado ni corregido — el equipo los aceptó tal como se propusieron.
+
+### 5. Qué hubo que corregir o verificar manualmente
+
+- `php artisan test` corrido después de cada uno de los tres cambios (54/56, mismas 2 fallas preexistentes) — pero la IA fue explícita en que esto no prueba nada de los cambios en sí: los tres son puramente de interfaz (Blade/Alpine/Livewire sin lógica de dominio nueva), así que la suite automatizada no los ejerce; la verificación real queda pendiente de que el equipo los pruebe visualmente en el navegador.
+
+### 6. Qué se aprendió del proceso
+
+- Cuando un permiso ya fue diseñado para distinguir dos roles (aquí, `requests.finalize`), suele bastar para resolver pedidos de UI relacionados sin tener que tocar la capa de autorización de nuevo — el trabajo de diseño de la entrada anterior se pagó solo en esta.
+- Un cambio de interfaz "que solo oculta botones" puede dar una falsa sensación de restricción completa si el permiso subyacente sigue siendo más amplio que lo que la UI ahora muestra — vale la pena decirlo explícitamente en vez de dejar que el equipo asuma que ocultar el botón es lo mismo que bloquear la acción.
+- Tres cambios pequeños y sucesivos, cada uno verificado brevemente antes de pasar al siguiente, permitieron detectar rápido cuando algo no coincidía con lo pedido (como en el mensaje anterior, donde el equipo pidió quitar los botones de Docencia del perfil de Registro después de ver el resultado del primer ajuste) — iterar en pasos cortos con revisión visual entre cada uno resultó más eficiente que intentar adivinar el diseño final de una sola vez.
+
+---

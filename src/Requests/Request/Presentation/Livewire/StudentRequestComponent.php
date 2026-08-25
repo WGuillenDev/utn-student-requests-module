@@ -334,8 +334,8 @@ class StudentRequestComponent extends Component
     private function statusVariant(string $status): string
     {
         return match (true) {
-            $status === 'Approved' => 'positive',
-            $status === 'Denied' => 'negative',
+            in_array($status, ['Approved by Docencia', 'Approved by Registro'], true) => 'positive',
+            in_array($status, ['Denied by Docencia', 'Denied by Registro'], true) => 'negative',
             $status === 'Pending Review' => 'pending',
             default => '',
         };

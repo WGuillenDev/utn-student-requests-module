@@ -29,6 +29,8 @@ final class DomainServiceProvider extends ServiceProvider
         => \Src\Requests\Request\Infrastructure\Persistence\Repositories\EloquentStudentAcademicProfileRepository::class,
         \Src\Requests\Request\Domain\Contracts\RequestNotifierInterface::class
         => \Src\Requests\Request\Infrastructure\Notifications\EloquentRequestNotifier::class,
+        \Src\Requests\Request\Domain\Contracts\AcademicRecordRegistrarInterface::class
+        => \Src\Requests\Request\Infrastructure\Persistence\Repositories\EloquentAcademicRecordRegistrar::class,
         \Src\Requests\Request\Domain\Contracts\HolidayCalendarInterface::class
         => \Src\Requests\Request\Infrastructure\ExternalServices\NagerDateHolidayCalendar::class,
         \Src\Requests\WaiverRule\Domain\Contracts\WaiverRuleRepositoryInterface::class

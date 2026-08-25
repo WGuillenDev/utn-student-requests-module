@@ -49,5 +49,14 @@ class PermissionSeeder extends Seeder
             ['name' => 'requests.review'],
             ['module' => 'requests', 'action' => 'review'],
         );
+
+        // Custom action, separate from 'requests.review': closing a
+        // request for good ('Approved by Registro'/'Denied by Registro').
+        // See RequestPolicy::finalize() — only the Registro role holds
+        // this one, unlike 'requests.review' which Docencia also has.
+        Permission::query()->firstOrCreate(
+            ['name' => 'requests.finalize'],
+            ['module' => 'requests', 'action' => 'finalize'],
+        );
     }
 }

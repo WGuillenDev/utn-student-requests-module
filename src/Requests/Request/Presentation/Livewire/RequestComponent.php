@@ -81,6 +81,14 @@ class RequestComponent extends Component
     public string $viewingExternalCourseCredits = '';
 
     /**
+     * Drives the green "Guardado correctamente" checkmark next to
+     * "Guardar datos externos" — true right after a successful save,
+     * reset to false as soon as either field changes again (see
+     * updated()) so the checkmark never lingers next to unsaved edits.
+     */
+    public bool $externalCourseDataSaved = false;
+
+    /**
      * The review modal's "Tipo de documento" + file picker — Docencia
      * attaching its own supporting document to a request, on top of
      * whatever the student already submitted. Free text rather than
@@ -97,12 +105,13 @@ class RequestComponent extends Component
 
     /**
      * The request's type, seeded by openViewModal() — the status
-     * button row needs it to decide whether "Aprobada" gets its own
-     * button. Course Validation requests reach Approved through
-     * Reconocer in the "Cursos a convalidar" table instead, so the
-     * reference design's 4-button row (no Aprobada) applies there;
-     * Requirement Waiver has no such alternate path, so it keeps a
-     * 5th button.
+     * button row needs it to decide whether "Aprobada por Docencia"
+     * gets its own button. Course Validation requests reach that status
+     * through Reconocer in the "Cursos a convalidar" table instead, so
+     * it doesn't get a duplicate button there; Requirement Waiver has no
+     * such alternate path, so it keeps its own button. Both types get
+     * the Registro-only final buttons when $viewingRequest['canFinalize']
+     * is true (see openViewModal()).
      */
     public string $reviewingType = '';
 
@@ -154,6 +163,10 @@ class RequestComponent extends Component
     {
         if (in_array($property, self::FILE_FIELDS, true)) {
             $this->validateOnly($property);
+        }
+
+        if (in_array($property, ['viewingExternalCourseCode', 'viewingExternalCourseCredits'], true)) {
+            $this->externalCourseDataSaved = false;
         }
     }
 
@@ -232,12 +245,14 @@ class RequestComponent extends Component
             'studentRecord' => $this->studentRecord($request->studentId()),
             'statusHistory' => $this->statusHistoryFor($request->id()),
             'canReview' => Auth::user()->can('review', $request) && ! $request->isFinal(),
+            'canFinalize' => Auth::user()->can('finalize', $request) && ! $request->isFinal(),
         ];
 
         $this->viewingExternalCourseCode = $request->externalCourseCode() ?? '';
         $this->viewingExternalCourseCredits = $request->externalCourseCredits() !== null
             ? (string) $request->externalCourseCredits()
             : '';
+        $this->externalCourseDataSaved = false;
 
         $this->reviewingId = $id;
         $this->reviewingType = $request->type();
@@ -325,6 +340,7 @@ class RequestComponent extends Component
         $this->viewingRequest['externalCourseCode'] = $this->viewingExternalCourseCode !== '' ? $this->viewingExternalCourseCode : null;
         $this->viewingRequest['externalCourseCredits'] = $credits;
 
+        $this->externalCourseDataSaved = true;
         $this->dispatch('toast', variant: 'success', text: __('External course data saved.'));
     }
 
@@ -473,6 +489,17 @@ class RequestComponent extends Component
     }
 
     /**
+     * Statuses whose name says "by Registro" — gated behind the
+     * 'finalize' ability on top of 'review', so Docencia (which only
+     * holds 'review') can never reach them even by crafting a direct
+     * changeStatus() call; the blade only renders their buttons under
+     * the same condition ($viewingRequest['canFinalize']).
+     *
+     * @var array<int, string>
+     */
+    private const REGISTRAR_ONLY_STATUSES = ['Verified by Registro', 'Approved by Registro', 'Denied by Registro'];
+
+    /**
      * $status lets the "Cursos a convalidar" table's Reconocer/No
      * reconocer buttons drive this same method (with $reviewingId
      * seeded by openViewModal()) as the merged-in "Cambiar estado a"
@@ -490,7 +517,14 @@ class RequestComponent extends Component
         $request = $findUseCase->handle($this->reviewingId);
         $this->authorize('review', $request);
 
-        if ($this->reviewStatus === 'Denied' && trim($this->reviewComment) === '') {
+        // The Registro-named steps need the extra 'finalize' ability on
+        // top of 'review' — Docencia holds 'review' but not 'finalize',
+        // so it can reach every other status but not these.
+        if (in_array($this->reviewStatus, self::REGISTRAR_ONLY_STATUSES, true)) {
+            $this->authorize('finalize', $request);
+        }
+
+        if (in_array($this->reviewStatus, ['Denied by Docencia', 'Denied by Registro'], true) && trim($this->reviewComment) === '') {
             $this->addError('reviewComment', __('A comment is required to deny a request.'));
 
             return;

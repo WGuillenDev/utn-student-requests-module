@@ -24,8 +24,13 @@ final class Request
      * A request in either of these statuses is closed. It cannot be
      * moved to any other status — reopening a resolved request is not
      * supported; a new request must be filed instead.
+     *
+     * 'Approved by Docencia'/'Denied by Docencia' are deliberately NOT
+     * final: they're Docencia's substantive decision, but the request
+     * only truly closes once Registro applies the matching final status
+     * (see RequestPolicy::finalize(), gated to the Registro role only).
      */
-    private const FINAL_STATUSES = ['Approved', 'Denied'];
+    private const FINAL_STATUSES = ['Approved by Registro', 'Denied by Registro'];
 
     private function __construct(
         private readonly ?int $id,

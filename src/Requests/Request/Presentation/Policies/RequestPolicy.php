@@ -92,6 +92,18 @@ class RequestPolicy
         return $user->hasPermissionTo('requests.review');
     }
 
+    /**
+     * Gates the final closing step ('Approved by Registro'/'Denied by
+     * Registro') separately from the general review() ability — Docencia
+     * can review a request all the way to 'Approved by Docencia'/'Denied
+     * by Docencia', but only a user holding 'requests.finalize' (the
+     * Registro role, per RoleSeeder) can close it for good.
+     */
+    public function finalize(User $user, Request $request): bool
+    {
+        return $user->hasPermissionTo('requests.finalize');
+    }
+
     private function ownsRequest(User $user, Request $request): bool
     {
         return StudentModel::query()

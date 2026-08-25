@@ -6,6 +6,7 @@ namespace Src\Requests\Request\Application\UseCases;
 
 use Src\Requests\Request\Application\DTOs\RequestDTO;
 use Src\Requests\Request\Domain\Contracts\RequestAttachmentRepositoryInterface;
+use Src\Requests\Request\Domain\Contracts\RequestNotifierInterface;
 use Src\Requests\Request\Domain\Contracts\RequestRepositoryInterface;
 use Src\Requests\Request\Domain\Entities\Request;
 use Src\Requests\Request\Domain\Exceptions\DuplicateWaiverRequestException;
@@ -37,6 +38,7 @@ final class CreateRequestUseCase
         private readonly ValidationPrecedentRepositoryInterface $validationPrecedentRepository,
         private readonly WaiverRuleRepositoryInterface $waiverRuleRepository,
         private readonly WaiverEngine $waiverEngine,
+        private readonly RequestNotifierInterface $notifier,
     ) {}
 
     public function handle(RequestDTO $dto): Request
@@ -63,6 +65,8 @@ final class CreateRequestUseCase
         if ($dto->attachments !== []) {
             $this->attachmentRepository->attach($saved->id(), $dto->attachments);
         }
+
+        $this->notifier->notifyRequestSubmitted($saved);
 
         return $saved;
     }

@@ -11,14 +11,14 @@ use Src\Requests\Request\Domain\Entities\Request;
 
 final class EloquentRequestNotifier implements RequestNotifierInterface
 {
-    public function notifyStatusChanged(Request $request, string $previousStatus): void
+    public function notifyRequestSubmitted(Request $request): void
     {
         $student = StudentModel::query()->with('user')->find($request->studentId());
 
         // A student without a linked user account (or a soft-deleted
         // one) simply can't receive mail — this is not an error worth
-        // failing the status change over, the review itself already
-        // succeeded and was recorded in RequestStatusHistory.
+        // failing the submission over, the request itself already
+        // succeeded and was persisted.
         if ($student === null || $student->user === null) {
             return;
         }
@@ -27,7 +27,7 @@ final class EloquentRequestNotifier implements RequestNotifierInterface
         $courseLabel = $course ? "{$course->code} — {$course->name}" : (string) $request->courseId();
 
         $student->user->notify(
-            new RequestStatusChangedNotification($request, $previousStatus, $courseLabel),
+            new RequestSubmittedNotification($request, $courseLabel),
         );
     }
 }

@@ -75,6 +75,16 @@ class DatabaseSeeder extends Seeder
 
         $teachingCoordinatorUser->roles()->sync([$teachingCoordinatorRole->id]);
 
+        $registrarRole = Role::query()->where('name', 'Registro')->firstOrFail();
+
+        $registrarUser = User::factory()->create([
+            'name' => 'registro prueba ISW-521',
+            'email' => 'registro@gmail.com',
+            'password' => bcrypt('12345678'),
+        ]);
+
+        $registrarUser->roles()->sync([$registrarRole->id]);
+
         // Runs last, not in the $this->call() block above: its waiver-
         // engine fixtures are keyed to the estudiante@gmail.com user
         // created just above, and would silently no-op if seeded first.
