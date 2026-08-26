@@ -209,7 +209,7 @@ Connecting the module to a real institutional system is a matter of writing a ne
 
 ## Project Status
 
-**Functionally complete** for ES-01 through ES-04, verified end to end in the browser against a real database.
+All four requirements — **ES-01 through ES-04** — are implemented and verified end to end in the browser against a real database, as a standalone MVP (see [Scope and Integration](#scope-and-integration) above).
 
 Implemented: the rules engine and its per-course configuration, waiver deduplication, the validation precedent catalog, the two-stage Docencia → Registro review, official document generation (SLR-002 and RSREC-001), submission email, academic credit registration on approval, the staff inbox with search and PDF/Excel export, the student portal with progress tracking, RBAC across five roles, and keyboard accessibility.
 
