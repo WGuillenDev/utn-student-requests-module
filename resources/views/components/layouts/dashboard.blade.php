@@ -60,6 +60,11 @@
         }
     }" x-on:livewire:navigated.window="currentSection = ''; currentSub = ''">
 
+        {{-- First element in the tab order: lets keyboard users jump past
+             the sidebar and topbar straight to the page content (WCAG 2.4.1).
+             Visually hidden until focused. --}}
+        <a href="#main-content" class="skip-link">{{ __('Skip to main content') }}</a>
+
         <div class="backdrop" :class="{ 'show': mobileOpen }" @click="mobileOpen = false"></div>
 
         {{--
@@ -80,7 +85,7 @@
         <div class="main">
             <x-siga.topbar :title="$title ?? null" :subtitle="$subtitle ?? null" />
 
-            <main class="content">
+            <main class="content" id="main-content" tabindex="-1">
                 {{ $slot }}
             </main>
 

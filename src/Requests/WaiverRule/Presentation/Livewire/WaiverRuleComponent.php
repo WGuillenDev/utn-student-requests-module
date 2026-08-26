@@ -32,12 +32,9 @@ class WaiverRuleComponent extends Component
     use InteractsWithExports;
 
     /**
-     * Waiver rules are a small, reference-style catalog scoped per course
-     * (a handful of rows per course) — same reasoning as RoleComponent:
-     * client-side is the right default, ships once and Alpine resolves
-     * search/sort/pagination with zero further server round-trips. Flip
-     * to 'server' only if this catalog is ever expected to grow into the
-     * hundreds/thousands across all courses.
+     * A small catalog scoped per course, so it ships once and Alpine
+     * resolves search, sort and pagination without further round-trips.
+     * Switch to 'server' only if it grows past a few hundred rows.
      */
     protected string $tableMode = 'client';
 
@@ -340,11 +337,8 @@ class WaiverRuleComponent extends Component
     }
 
     /**
-     * Cross-context read (Academic), same reasoning already accepted for
-     * RequestComponent::courseOptions() — used both for the "course" and
-     * "required course" selects of the create/edit modal. Requires a
-     * career to be picked first, same reasoning as
-     * ValidationPrecedentComponent::courseOptions().
+     * Cross-context read into Academic, feeding both course selects of the
+     * create/edit modal. Requires a career to be chosen first.
      *
      * @return array<int, array{id: int, label: string}>
      */

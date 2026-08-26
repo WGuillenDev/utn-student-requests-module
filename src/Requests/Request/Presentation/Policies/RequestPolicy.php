@@ -9,24 +9,19 @@ use App\Models\User;
 use Src\Requests\Request\Domain\Entities\Request;
 
 /**
- * Registered via Gate::policy() in DomainServiceProvider::$domainPolicies.
- * Superadmin bypasses all of this through Gate::before.
+ * Registered via Gate::policy() in DomainServiceProvider. Superadmin
+ * bypasses all of it through Gate::before.
  *
- * The Estudiante role holds the blanket 'requests.view' permission too
- * (it needs to view its own requests), but that permission alone can't
- * distinguish "my requests" from "everyone's requests" — a plain
- * hasPermissionTo() check would let a student into the staff inbox
- * (RequestComponent, whose query is intentionally unscoped) and see
- * every student's data. So both methods below add an explicit role +
- * ownership check on top of the permission check:
- *  - viewAny() denies the Estudiante role outright — the staff inbox is
- *    not for them; they use the dedicated self-service screen instead
- *    (StudentRequestComponent), which never calls authorize('viewAny', ...).
- *  - view() restricts the Estudiante role to requests belonging to
- *    their own students row (via students.user_id), used e.g. by the
- *    self-service screen's "Ver" action.
- * Every other role (Superadmin/Admin/Coordinadora de Docencia) is
- * unaffected — hasRole('Estudiante') is false for all of them.
+ * Students hold 'requests.view' so they can see their own requests, but
+ * that permission alone cannot tell "mine" from "everyone's" — on its
+ * own it would open the unscoped staff inbox to them. So two methods add
+ * a role and ownership check on top:
+ *  - viewAny() denies students outright; they use the self-service
+ *    screen, which never authorizes against it.
+ *  - view() restricts students to requests owned by their own student
+ *    row.
+ *
+ * No other role is affected.
  */
 class RequestPolicy
 {
@@ -83,9 +78,8 @@ class RequestPolicy
     }
 
     /**
-     * Custom action beyond the standard 7: reviewing (changing the
-     * status of) a request. Not part of PermissionSeeder::ACTIONS —
-     * seeded separately as 'requests.review'.
+     * Custom action outside the standard seven, seeded separately as
+     * 'requests.review'.
      */
     public function review(User $user, Request $request): bool
     {
@@ -93,11 +87,9 @@ class RequestPolicy
     }
 
     /**
-     * Gates the final closing step ('Approved by Registro'/'Denied by
-     * Registro') separately from the general review() ability — Docencia
-     * can review a request all the way to 'Approved by Docencia'/'Denied
-     * by Docencia', but only a user holding 'requests.finalize' (the
-     * Registro role, per RoleSeeder) can close it for good.
+     * Gates the closing step separately from review(): Docencia can take
+     * a request as far as its own decision, but only a holder of
+     * 'requests.finalize' can close it for good.
      */
     public function finalize(User $user, Request $request): bool
     {

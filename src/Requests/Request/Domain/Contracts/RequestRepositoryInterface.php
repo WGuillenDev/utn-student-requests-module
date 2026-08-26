@@ -16,11 +16,10 @@ interface RequestRepositoryInterface
     public function find(int $id): ?Request;
 
     /**
-     * @param array<string, mixed> $filters ES-04's inbox filters. Recognized
-     *   keys: 'type' (Request::type()), 'status' (Request::status()),
-     *   'careerId' (the requested course's owning career), 'dateFrom' and
-     *   'dateTo' (received-date range, inclusive, 'Y-m-d'). All optional —
-     *   an absent or empty value is not applied.
+     * @param array<string, mixed> $filters Inbox filters (ES-04). Keys:
+     *   'type', 'status', 'statusIn' (array, matches any), 'careerId',
+     *   'dateFrom'/'dateTo' (inclusive 'Y-m-d' range). All optional; an
+     *   absent or empty value is not applied.
      * @return array<int, Request>
      */
     public function all(?string $search = null, ?string $sortBy = null, string $sortDir = 'asc', array $filters = []): array;
@@ -39,9 +38,7 @@ interface RequestRepositoryInterface
     ): array;
 
     /**
-     * Student self-service listing ("My requests") — scoped strictly to
-     * one student, no free-text search (the owning student never has
-     * more than a handful of requests to browse).
+     * Student self-service listing, scoped strictly to one student.
      *
      * @return array{items: array<int, Request>, total: int}
      */

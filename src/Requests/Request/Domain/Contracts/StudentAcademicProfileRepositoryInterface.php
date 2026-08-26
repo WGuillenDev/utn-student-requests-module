@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace Src\Requests\Request\Domain\Contracts;
 
 /**
- * Port to the student's "expediente simulado" (simulated academic
- * record) that the WaiverEngine evaluates rules against. Kept separate
- * from RequestRepositoryInterface because it reads a different
- * aggregate (Students/AcademicRecords, owned by another bounded
- * context) — the engine only needs to ask yes/no questions about a
- * student's academic history, never to load or mutate those records.
+ * Port to the student academic record the WaiverEngine evaluates rules
+ * against. Separate from RequestRepositoryInterface because it reads an
+ * aggregate owned by another bounded context, and only ever asks yes/no
+ * questions about it — never loads or mutates those records.
  */
 interface StudentAcademicProfileRepositoryInterface
 {
@@ -20,12 +18,10 @@ interface StudentAcademicProfileRepositoryInterface
     public function hasApprovedCourseWithMinimumGrade(int $studentId, int $courseId, float $minimumGrade): bool;
 
     /**
-     * Type (b): "Créditos o cursos acumulados ≥ K". No `credits` column
-     * exists in this module's course catalog (out of scope per the
-     * migration's documented scope cuts), so this counts approved
-     * courses — Approved, plus the three "credited/waived" statuses,
-     * which still represent completed academic progress even though
-     * they weren't literally passed with a grade.
+     * Type (b): "Créditos o cursos acumulados ≥ K". Counts courses, not
+     * credits — the course catalog has no credits column in this module's
+     * scope. Includes the credited/waived statuses, which still count as
+     * completed progress.
      */
     public function countApprovedCourses(int $studentId): int;
 

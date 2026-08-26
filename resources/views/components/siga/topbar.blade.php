@@ -2,13 +2,13 @@
 
 <header class="topbar">
     <div class="topbar-left">
-        <div class="icon-btn" title="{{ __('Expand/collapse menu') }}" @click="window.innerWidth < 760 ? mobileOpen = !mobileOpen : collapsed = !collapsed">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <button type="button" class="icon-btn" title="{{ __('Expand/collapse menu') }}" aria-label="{{ __('Expand/collapse menu') }}" @click="window.innerWidth < 760 ? mobileOpen = !mobileOpen : collapsed = !collapsed">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
                 <line x1="4" y1="6" x2="20" y2="6"></line>
                 <line x1="4" y1="12" x2="20" y2="12"></line>
                 <line x1="4" y1="18" x2="20" y2="18"></line>
             </svg>
-        </div>
+        </button>
         <div class="title-wrap">
             {{-- Server-rendered from the current page's ->layout(..., ['title' => ..., 'subtitle' => ...])
                  call — NOT Alpine's `sections[currentSection]`. That client-side map only reflects
@@ -22,14 +22,14 @@
     </div>
 
     <div class="topbar-right">
-        <div class="font-switch" title="{{ __('Font size (accessibility)') }}">
-            <div class="font-btn" :class="{ 'active': fontLevel === 'a' }" @click="setFont('a')">A</div>
-            <div class="font-btn" :class="{ 'active': fontLevel === 'aa' }" @click="setFont('aa')">AA</div>
-            <div class="font-btn" :class="{ 'active': fontLevel === 'aaa' }" @click="setFont('aaa')">AAA</div>
+        <div class="font-switch" role="group" aria-label="{{ __('Font size (accessibility)') }}">
+            <button type="button" class="font-btn" :class="{ 'active': fontLevel === 'a' }" :aria-pressed="fontLevel === 'a'" @click="setFont('a')" aria-label="{{ __('Normal font size') }}">A</button>
+            <button type="button" class="font-btn" :class="{ 'active': fontLevel === 'aa' }" :aria-pressed="fontLevel === 'aa'" @click="setFont('aa')" aria-label="{{ __('Large font size') }}">AA</button>
+            <button type="button" class="font-btn" :class="{ 'active': fontLevel === 'aaa' }" :aria-pressed="fontLevel === 'aaa'" @click="setFont('aaa')" aria-label="{{ __('Extra large font size') }}">AAA</button>
         </div>
 
-        <div class="icon-btn round" @click="toggleDark()">
-            <svg x-show="!dark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <button type="button" class="icon-btn round" @click="toggleDark()" :aria-pressed="dark" aria-label="{{ __('Toggle dark mode') }}" title="{{ __('Toggle dark mode') }}">
+            <svg x-show="!dark" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="5"></circle>
                 <line x1="12" y1="1" x2="12" y2="3"></line>
                 <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -40,25 +40,27 @@
                 <line x1="4.2" y1="19.8" x2="5.6" y2="18.4"></line>
                 <line x1="18.4" y1="5.6" x2="19.8" y2="4.2"></line>
             </svg>
-            <svg x-show="dark" x-cloak width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg x-show="dark" x-cloak aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
             </svg>
-        </div>
+        </button>
 
-        <div class="profile-wrap" x-data="{ profileOpen: false }" @click.outside="profileOpen = false">
-            <div class="profile-btn" @click="profileOpen = !profileOpen">
+        {{-- Escape closes the menu and returns focus to its trigger, so a
+             keyboard user is never left inside a dismissed menu. --}}
+        <div class="profile-wrap" x-data="{ profileOpen: false }" @click.outside="profileOpen = false" @keydown.escape="if (profileOpen) { profileOpen = false; $refs.profileBtn.focus() }">
+            <button type="button" class="profile-btn" x-ref="profileBtn" @click="profileOpen = !profileOpen" :aria-expanded="profileOpen" aria-haspopup="true" aria-label="{{ __('User menu') }}">
 
                 <div class="avatar">
                     @if (auth()->user()->avatarUrl())
-                    <img src="{{ auth()->user()->avatarUrl() }}" alt="{{ auth()->user()->name }}">
+                    <img src="{{ auth()->user()->avatarUrl() }}" alt="">
                     @else
                     {{ auth()->user()->initials() ?? 'UTN' }}
                     @endif
                 </div>
-                <svg id="profileChevron" :class="{ 'open': profileOpen }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg id="profileChevron" :class="{ 'open': profileOpen }" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
-            </div>
+            </button>
 
 
             <div class="profile-menu" :class="{ 'open': profileOpen }">

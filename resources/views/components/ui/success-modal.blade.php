@@ -24,6 +24,6 @@
         <div class="del-text">
             {{ $slot }}
         </div>
-        <button type="button" class="del-btn-ok" wire:click="{{ $closeAction }}">OK</button>
+        <button type="button" class="del-btn-ok" wire:click="{{ $closeAction }}">{{ __('Accept') }}</button>
     </div>
 </div>

@@ -9,11 +9,13 @@ use Src\Requests\Request\Domain\Entities\Request;
 use Src\Requests\Request\Domain\Exceptions\RequestNotFoundException;
 
 /**
- * Docencia capturing the external course's own code/credits while
- * reviewing a Validation request — deliberately separate from
- * ChangeRequestStatusUseCase: saving this data is not itself a
- * decision (Reconocer/No reconocer), so it never touches status or
- * writes to RequestStatusHistory.
+ * Persists the external course's own code/credits/grade for a Validation
+ * request — called from RequestComponent::changeStatus() right alongside
+ * the Reconocer/No reconocer decision (there's no separate "Guardar datos
+ * externos" step any more), but kept as its own use case rather than
+ * folded into ChangeRequestStatusUseCase since it's conceptually a
+ * different write: this data isn't itself a status decision, and never
+ * touches RequestStatusHistory.
  */
 final class SaveExternalCourseDataUseCase
 {
@@ -21,11 +23,11 @@ final class SaveExternalCourseDataUseCase
         private readonly RequestRepositoryInterface $repository,
     ) {}
 
-    public function handle(int $requestId, ?string $code, ?int $credits): Request
+    public function handle(int $requestId, ?string $code, ?int $credits, ?float $grade): Request
     {
         $request = $this->repository->find($requestId) ?? throw RequestNotFoundException::withId($requestId);
 
-        $request->setExternalCourseData($code, $credits);
+        $request->setExternalCourseData($code, $credits, $grade);
 
         return $this->repository->save($request);
     }

@@ -63,12 +63,9 @@ class TestDataSeeder extends Seeder
     }
 
     /**
-     * Fixtures wired specifically to the `estudiante@gmail.com` demo user
-     * (see RoleSeeder/DatabaseSeeder) and the 3 rule-engine outcomes
-     * (ES-01): ISW-521 is configured to auto-Approve, ISW-401 to
-     * auto-Deny, and ISW-315 is left with no rules at all so it falls
-     * through to manual review — exercising all three in the UI without
-     * the reviewer having to fabricate data by hand before the demo.
+     * Fixtures for the estudiante@gmail.com demo user covering all three
+     * ES-01 engine outcomes: ISW-521 auto-approves, ISW-401 auto-denies,
+     * and ISW-315 has no rules so it falls through to manual review.
      *
      * @param \Illuminate\Support\Collection<string, CourseModel> $courses
      */

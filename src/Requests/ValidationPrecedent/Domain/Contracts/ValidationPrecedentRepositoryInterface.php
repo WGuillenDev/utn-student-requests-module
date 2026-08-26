@@ -16,11 +16,9 @@ interface ValidationPrecedentRepositoryInterface
     public function find(int $id): ?ValidationPrecedent;
 
     /**
-     * Exact-match catalog lookup used by the Request context to
-     * auto-link a precedent when a student files a Validation request —
-     * distinct from the free-text `search` used by all()/paginate().
-     * Returns the most recent match when more than one resolution
-     * exists for the same (institution, external_course) pair.
+     * Exact-match lookup used to auto-link a precedent to a new Validation
+     * request, unlike the free-text search in all()/paginate(). Returns the
+     * most recent match when a pair has several resolutions.
      */
     public function findByInstitutionAndExternalCourse(string $institution, string $externalCourse): ?ValidationPrecedent;
 

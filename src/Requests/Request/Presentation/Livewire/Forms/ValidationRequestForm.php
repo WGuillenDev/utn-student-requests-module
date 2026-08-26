@@ -10,18 +10,12 @@ use Src\Requests\Request\Application\DTOs\RequestDTO;
 use Src\Requests\Request\Presentation\Livewire\Forms\Concerns\StoresRequestAttachments;
 
 /**
- * Student self-service counterpart to RequestForm — models only the
- * "Validation" flow, with no studentId field (see WaiverRequestForm's
- * docblock for why this is a separate Form Object).
+ * Student self-service form for the Validation flow.
  *
- * Decided with Docencia and Registro: one submission bundles up to
- * MAX_COURSES course lines (internal course + external course name +
- * origin institution) sharing a single pool of supporting documents,
- * instead of one course per submission with 3 separately-named
- * required documents. There is still no shared "batch" aggregate in
- * the Domain — StudentRequestComponent::submitValidation() turns each
- * course line into its own independent Request, so Docencia reviews
- * and resolves every one on its own, same as before.
+ * One submission bundles up to MAX_COURSES course lines sharing a single
+ * pool of supporting documents. There is no batch aggregate in the
+ * Domain: each line becomes an independent Request that Docencia
+ * reviews and resolves on its own.
  */
 class ValidationRequestForm extends Form
 {
@@ -59,20 +53,15 @@ class ValidationRequestForm extends Form
     }
 
     /**
-     * One Request per course line, each with its own copy of every
-     * attached document — the `files` table's (disk, path) unique
-     * constraint means the same stored file can't be pointed to by
-     * more than one row, so each course line gets a fresh copy of the
-     * shared uploads rather than reusing a single stored File.
+     * One DTO per course line, each with its own copy of every attached
+     * document: the files table's (disk, path) unique constraint forbids
+     * two rows pointing at one stored file.
      *
-     * Only the first DTO carries notify: true (see RequestDTO's
-     * docblock) — CreateRequestUseCase sends one email per DTO it's
-     * told to notify for, and this submission should produce exactly
-     * one confirmation email for the whole batch, not one per course.
+     * Only the first DTO sets notify, so the batch produces a single
+     * confirmation email. See RequestDTO.
      *
-     * @param  array<int, string>  $courseLabels  UTN course id => display
-     *   label, used only to build each DTO's batchCourseNames (see
-     *   RequestDTO's docblock) — never persisted.
+     * @param  array<int, string>  $courseLabels  Course id => label, used
+     *   only to build batchCourseNames; never persisted.
      * @return array<int, RequestDTO>
      */
     public function toDtos(int $studentId, array $courseLabels = []): array

@@ -13,17 +13,14 @@ use Src\Requests\Request\Domain\Entities\Request as RequestEntity;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Streams a document attached to a Request (ES-01/ES-02's supporting
- * files), reachable from both the Docencia inbox's detail view and the
- * student's own "My requests" screen. Gated by the same RequestPolicy::
- * view() ability the detail modal itself is gated by — a student can
- * only ever reach their own request's files, staff can reach any.
+ * Streams a document attached to a Request, reachable from both the staff
+ * inbox and the student's own screen. Gated by the same
+ * RequestPolicy::view() ability as the detail modal, so a student reaches
+ * only their own files while staff reach any.
  *
- * Deliberately a plain authenticated route, not a signed URL: the file
- * is only ever linked from an already-authorized page (the request
- * detail modal), so there's no case where an unauthenticated party
- * legitimately holds this link — a signed URL would only add expiry
- * complexity without a real threat it defends against here.
+ * A plain authenticated route rather than a signed URL: the link is only
+ * ever rendered on an already-authorized page, so signing would add
+ * expiry handling without defending against a real threat here.
  */
 final class RequestAttachmentDownloadController extends Controller
 {
@@ -39,8 +36,7 @@ final class RequestAttachmentDownloadController extends Controller
     }
 
     /**
-     * Content-Disposition: attachment — forces the save dialog, the
-     * same behavior this controller had before preview() existed.
+     * Content-Disposition: attachment — forces the save dialog.
      */
     public function download(int $fileId): StreamedResponse|Response
     {
@@ -50,11 +46,9 @@ final class RequestAttachmentDownloadController extends Controller
     }
 
     /**
-     * Shared by preview()/download(): resolves the file, confirms it
-     * belongs to a Request (not some other fileable type), and
-     * authorizes against the exact same RequestPolicy::view() ability
-     * both actions rely on — the two only differ in how the found file
-     * is finally streamed back.
+     * Resolves the file, confirms it belongs to a Request rather than some
+     * other fileable type, and authorizes it. Shared by both actions,
+     * which differ only in how the file is streamed back.
      */
     private function resolveFile(int $fileId): FileModel
     {

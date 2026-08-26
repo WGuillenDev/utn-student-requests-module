@@ -16,7 +16,17 @@ class RoleSeeder extends Seeder
     {
         $superadmin = Role::query()->firstOrCreate(['name' => 'Superadmin']);
         $superadmin->permissions()->sync(Permission::query()->pluck('id'));
-        Role::query()->firstOrCreate(['name' => 'Admin']);
+
+        // Admin never got its own scoped-down permission list anywhere in
+        // this codebase (see Role::PROTECTED_NAMES — both are treated as
+        // the same tier of structural role) — it's meant to have every
+        // business permission Superadmin has, just without Superadmin's
+        // Gate::before bypass (DomainServiceProvider::registerSuperAdminBypass()).
+        // Synced the same way, for the same reason: so a permission added
+        // later (like 'requests.finalize', added after Admin's original
+        // one-time setup) doesn't silently leave Admin unable to act.
+        $admin = Role::query()->firstOrCreate(['name' => 'Admin']);
+        $admin->permissions()->sync(Permission::query()->pluck('id'));
 
         $studentRole = Role::query()->firstOrCreate(['name' => 'Estudiante']);
         $studentRole->permissions()->sync(

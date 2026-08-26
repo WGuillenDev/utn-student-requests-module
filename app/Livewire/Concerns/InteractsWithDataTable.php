@@ -7,33 +7,19 @@ namespace App\Livewire\Concerns;
 use Livewire\Attributes\Url;
 
 /**
- * Generic pagination/sorting/search state shared by every CRUD data-table
- * component, regardless of bounded context. Extracted so no future module
- * has to re-implement it (DRY, matches the existing App\Concerns pattern
- * used by ProfileValidationRules / PasswordValidationRules).
+ * Pagination, sorting and search state shared by every CRUD data-table
+ * component.
  *
- * Two table modes are supported, selected per-component via the
- * `$tableMode` property:
+ * Two modes, selected per component via $tableMode:
+ *  - 'client': the full collection is handed to Alpine once per render
+ *    (see resources/js/data-table.js) and filtered in the browser. For
+ *    small reference datasets such as roles or permissions.
+ *  - 'server': Livewire-driven pagination, for datasets too large to
+ *    ship in one response.
  *
- *  - 'client' (default): the full collection is fetched from the
- *    Application layer ONCE per Livewire render and handed to Alpine.js
- *    as JSON (see resources/js/data-table.js — `crudTable`). Search, sort
- *    and pagination are then resolved entirely in the browser: zero
- *    Livewire round-trips until an actual mutation (create/update/delete)
- *    happens. Intended for small, reference-style datasets — roles,
- *    permissions, catalogs, statuses, etc.
- *
- *  - 'server': classic Livewire-driven pagination. Search/sort/page
- *    changes trigger a request to the server, as is required once a
- *    dataset is too large to ship to the browser in one response.
- *
- * A concrete component only needs to:
- *   1. Set `protected string $tableMode = 'client' | 'server';`
- *   2. In `render()`, branch on `$this->isServerMode()` and call the
- *      matching Application UseCase method (`all()` vs `paginate()`).
- *
- * Everything else — the four pagination actions, the sort toggle, and
- * resetting the page on search/perPage changes — is inherited.
+ * A component sets $tableMode, then branches on isServerMode() in
+ * render() to call the matching use case method. Everything else is
+ * inherited.
  */
 trait InteractsWithDataTable
 {
@@ -49,9 +35,8 @@ trait InteractsWithDataTable
     public string $sortDir = 'asc';
 
     /**
-     * Exposed to the Blade view so it can pick which set of directives to
-     * render (wire:* for 'server', x-* or @* for 'client')
-     * without changing a single visual class.
+     * Lets the Blade view pick which directives to render: Livewire
+     * bindings for server mode, Alpine bindings for client mode.
      */
     public function tableMode(): string
     {
@@ -110,24 +95,12 @@ trait InteractsWithDataTable
     }
 
     /**
-     * Client mode only — call this after any mutation (create/update/
-     * delete) that changes what the table should display, passing the
-     * freshly re-fetched rows. Dispatches a browser event that
-     * resources/js/data-table.js's `crudTable` Alpine component listens
-     * for and applies directly to its own `rows` state.
+     * Pushes freshly re-fetched rows into the Alpine table after a
+     * mutation. Necessary because Alpine evaluates x-data only on first
+     * insert, and Livewire's DOM morph preserves that state — so a new
+     * x-data attribute is never re-read and `rows` would go stale.
      *
-     * Why this exists: Alpine's `x-data="crudTable({ rows: @js($rows) })"`
-     * is evaluated once, the first time the element enters the DOM.
-     * Livewire's DOM morph deliberately preserves existing Alpine
-     * component state across re-renders (so open dropdowns, in-progress
-     * typing, etc. survive unrelated updates) — meaning a fresh x-data
-     * attribute in newly-rendered HTML is never re-read after that first
-     * init. Without this, `rows` goes stale the moment any mutation
-     * changes the underlying data.
-     *
-     * No-op in server mode, where Livewire's normal re-render already
-     * updates the DOM correctly on its own — every concrete component's
-     * save()/delete() can call this unconditionally regardless of mode.
+     * No-op in server mode, so components can call it unconditionally.
      *
      * @param array<int, array<string, mixed>> $rows
      */

@@ -18,6 +18,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Src\Requests\Request\Application\UseCases\AssignEstimatedResolutionDateUseCase;
@@ -25,11 +26,14 @@ use Src\Requests\Request\Application\UseCases\ChangeRequestStatusUseCase;
 use Src\Requests\Request\Application\UseCases\CreateRequestUseCase;
 use Src\Requests\Request\Application\UseCases\DeleteRequestUseCase;
 use Src\Requests\Request\Application\UseCases\FindRequestUseCase;
+use Src\Requests\Request\Application\UseCases\IssueResolutionUseCase;
 use Src\Requests\Request\Application\UseCases\ListRequestsUseCase;
 use Src\Requests\Request\Application\UseCases\SaveExternalCourseDataUseCase;
 use Src\Requests\Request\Domain\Contracts\RequestAttachmentRepositoryInterface;
 use Src\Requests\Request\Domain\Entities\Request;
 use Src\Requests\Request\Domain\Exceptions\InvalidStatusTransitionException;
+use Src\Requests\Request\Domain\ValueObjects\RequestAttachment;
+use Src\Requests\Request\Domain\ValueObjects\ResolutionData;
 use Src\Requests\Request\Presentation\Livewire\Forms\Concerns\StoresRequestAttachments;
 use Src\Requests\Request\Presentation\Livewire\Forms\RequestForm;
 use Src\Shared\Export\Contracts\ExcelExporterInterface;
@@ -51,17 +55,35 @@ class RequestComponent extends Component
      */
     protected string $tableMode = 'server';
 
+    /**
+     * The only accepted values of the URL-bound $activeTab. Anything else
+     * arriving through ?tab= is discarded in favour of the default —
+     * see normalizeActiveTab().
+     *
+     * @var array<int, string>
+     */
+    private const TABS = ['waiver', 'validation', 'history'];
+
+    private const DEFAULT_TAB = 'waiver';
+
+    /**
+     * Which inbox tab is open, bound to ?tab= so each sidebar link is a
+     * plain href to the tab it names and reloading or bookmarking keeps
+     * you on it (see sidebar.blade.php).
+     *
+     * Being URL-bound makes this user-supplied input: it is normalized
+     * against self::TABS on mount and on every update, so a hand-edited
+     * query string can never put the component into an unlisted tab.
+     */
+    #[Url(as: 'tab', history: true)]
+    public string $activeTab = self::DEFAULT_TAB;
+
     public bool $showCreateModal = false;
 
     /**
-     * Detail view — available for EVERY request regardless of status,
-     * so Docencia can always look back at a closed request's full data
-     * and attached documents. This is now the ONLY modal for reviewing
-     * a request too: the status buttons, estimated date, comment, and
-     * document upload that used to live in a separate "Review request"
-     * modal were merged in here, gated by $viewingRequest['canReview']
-     * — a closed/unauthorized request just doesn't render those
-     * controls, rather than needing a second modal to reach them.
+     * The single modal for both viewing and reviewing a request. Open for
+     * any request regardless of status; the review controls inside are
+     * gated by $viewingRequest['canReview'].
      */
     public bool $showViewModal = false;
 
@@ -71,7 +93,7 @@ class RequestComponent extends Component
     public ?array $viewingRequest = null;
 
     /**
-     * Bound to the "Código"/"Créditos" inputs in the "Cursos a
+     * Bound to the "Código"/"Créditos"/"Nota" inputs in the "Cursos a
      * convalidar" table — kept separate from $viewingRequest (a plain
      * read array rebuilt on every open/refresh) since these are live
      * form inputs.
@@ -80,22 +102,12 @@ class RequestComponent extends Component
 
     public string $viewingExternalCourseCredits = '';
 
-    /**
-     * Drives the green "Guardado correctamente" checkmark next to
-     * "Guardar datos externos" — true right after a successful save,
-     * reset to false as soon as either field changes again (see
-     * updated()) so the checkmark never lingers next to unsaved edits.
-     */
-    public bool $externalCourseDataSaved = false;
+    public string $viewingExternalCourseGrade = '';
 
     /**
-     * The review modal's "Tipo de documento" + file picker — Docencia
-     * attaching its own supporting document to a request, on top of
-     * whatever the student already submitted. Free text rather than
-     * one of the 4 fixed student-form document types (support_document/
-     * external_program/grade_certification/institution_proof): Docencia
-     * may need to attach things those categories don't cover (e.g. a
-     * signed resolution or a Registro memo).
+     * Document Docencia attaches on top of the student's own files. Free
+     * text rather than one of the four fixed student-form document types,
+     * since staff may need categories those do not cover.
      */
     public string $reviewDocumentType = '';
 
@@ -104,14 +116,9 @@ class RequestComponent extends Component
     public ?int $reviewingId = null;
 
     /**
-     * The request's type, seeded by openViewModal() — the status
-     * button row needs it to decide whether "Aprobada por Docencia"
-     * gets its own button. Course Validation requests reach that status
-     * through Reconocer in the "Cursos a convalidar" table instead, so
-     * it doesn't get a duplicate button there; Requirement Waiver has no
-     * such alternate path, so it keeps its own button. Both types get
-     * the Registro-only final buttons when $viewingRequest['canFinalize']
-     * is true (see openViewModal()).
+     * Seeded by openViewModal(). A Validation reaches 'Approved by
+     * Docencia' through the Reconocer action in the courses table, so it
+     * does not render the separate approve button a Waiver does.
      */
     public string $reviewingType = '';
 
@@ -121,13 +128,103 @@ class RequestComponent extends Component
 
     public string $reviewEstimatedDate = '';
 
+    /**
+     * Registro's "Emitir resolución (RSREC-001)" panel — the formal
+     * identifiers of the session where the resolution was taken. Reset
+     * in openViewModal(); consumed by issueResolution().
+     */
+    public string $resolutionNumber = '';
+
+    public string $resolutionSessionNumber = '';
+
+    public string $resolutionActNumber = '';
+
+    public string $resolutionSessionDate = '';
+
+    /**
+     * Whether the resolution-date cell is showing its editable input
+     * rather than the read-only value. Reset in openViewModal(), so it
+     * collapses again after a successful save; a failed save returns
+     * early and leaves the input open with its error message.
+     */
+    public bool $editingResolutionDate = false;
+
+    /**
+     * A Reconocer/No reconocer decision staged by markValidationDecision()
+     * so the courses table can preview it. Nothing is persisted until
+     * "Resolver y enviar a Registro" runs changeStatus(). Reset to null in
+     * openViewModal().
+     */
+    public ?string $stagedValidationDecision = null;
+
+    /**
+     * Success confirmation shown instead of the generic toast when
+     * changeStatus() hands a request to Registro, for either type.
+     */
+    public bool $showSentToRegistroModal = false;
+
+    /**
+     * Same success-modal pattern as $showSentToRegistroModal, for the
+     * closing end of the flow: set right after issueResolution() (RSREC-001)
+     * publishes the resolution, once the warning dialog has been confirmed.
+     */
+    public bool $showResolutionPublishedModal = false;
+
     public RequestForm $form;
 
     public function mount(): void
     {
         $this->authorize('viewAny', Request::class);
+        $this->normalizeActiveTab();
         $this->sortKey = 'created_at';
         $this->sortDir = 'desc';
+    }
+
+    /**
+     * Livewire hook: fires whenever $activeTab changes after mount,
+     * including when the browser's back/forward navigation replays a
+     * ?tab= value. Re-runs the same allow-list check as mount().
+     */
+    public function updatedActiveTab(): void
+    {
+        $this->normalizeActiveTab();
+    }
+
+    private function normalizeActiveTab(): void
+    {
+        if (! in_array($this->activeTab, self::TABS, true)) {
+            $this->activeTab = self::DEFAULT_TAB;
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function activeTypeFilter(): array
+    {
+        // 'history' is both types together, limited to the two statuses
+        // Registro closes a request with. The default arm is unreachable
+        // while normalizeActiveTab() guards $activeTab, and falls back to
+        // the narrowest filter rather than an unfiltered list.
+        $filters = match ($this->activeTab) {
+            'validation' => ['type' => 'Validation'],
+            'history' => ['statusIn' => ['Approved by Registro', 'Denied by Registro']],
+            default => ['type' => 'Requirement Waiver'],
+        };
+
+        // Both bandejas are worklists, not archives: each role sees only
+        // what still needs its action, and everything already closed
+        // lives in the history tab.
+        //  - Registro (holds 'requests.finalize'): Docencia has decided
+        //    but the resolution is not issued yet.
+        //  - Docencia (everyone else): not yet decided.
+        if ($this->activeTab !== 'history') {
+            $filters['statusIn'] = Auth::user()->hasPermissionTo('requests.finalize')
+                ? ['Approved by Docencia', 'Denied by Docencia']
+                : ['Pending Review', 'In Review'];
+        }
+
+        return $filters;
     }
 
     public function openCreateModal(): void
@@ -164,10 +261,6 @@ class RequestComponent extends Component
         if (in_array($property, self::FILE_FIELDS, true)) {
             $this->validateOnly($property);
         }
-
-        if (in_array($property, ['viewingExternalCourseCode', 'viewingExternalCourseCredits'], true)) {
-            $this->externalCourseDataSaved = false;
-        }
     }
 
     /**
@@ -201,22 +294,21 @@ class RequestComponent extends Component
     }
 
     /**
-     * Detail — available for any request the user is authorized to
-     * 'view' (RequestPolicy::view()), open or closed. Builds a plain
-     * array (not the domain entity) because the blade also needs
-     * cross-context labels (student name, course label, precedent
-     * resolution, attached documents) that don't belong on the Request
-     * entity itself.
+     * Builds a plain array rather than passing the domain entity, since
+     * the view also needs cross-context labels (student name, course
+     * label, attachments) that do not belong on the entity.
      *
-     * Also seeds every "reviewXxx" property this modal's merged-in
-     * review controls need (status buttons, estimated date, comment,
-     * document upload) — there is no separate review modal anymore, so
-     * this is the single place all of that state gets initialized.
+     * Also the single place every reviewXxx property is initialized.
      */
     public function openViewModal(int $id, FindRequestUseCase $useCase): void
     {
         $request = $useCase->handle($id);
         $this->authorize('view', $request);
+
+        $this->editingResolutionDate = false;
+        $this->showSentToRegistroModal = false;
+        $this->showResolutionPublishedModal = false;
+        $this->stagedValidationDecision = null;
 
         $students = $this->studentLabelsById();
         $courses = $this->courseLabelsById();
@@ -234,9 +326,10 @@ class RequestComponent extends Component
             'externalCourse' => $request->externalCourse(),
             'externalCourseCode' => $request->externalCourseCode(),
             'externalCourseCredits' => $request->externalCourseCredits(),
+            'externalCourseGrade' => $request->externalCourseGrade(),
             'engineResult' => $request->engineResult(),
             'status' => $request->status(),
-            'estimatedResolutionDate' => $request->estimatedResolutionDate(),
+            'estimatedResolutionDate' => $request->displayEstimatedResolutionDate(),
             'submittedAt' => $request->createdAt(),
             'precedentResolution' => $request->validationPrecedentId() !== null
                 ? ValidationPrecedentModel::query()->find($request->validationPrecedentId())?->resolution_number
@@ -252,15 +345,21 @@ class RequestComponent extends Component
         $this->viewingExternalCourseCredits = $request->externalCourseCredits() !== null
             ? (string) $request->externalCourseCredits()
             : '';
-        $this->externalCourseDataSaved = false;
+        $this->viewingExternalCourseGrade = $request->externalCourseGrade() !== null
+            ? (string) $request->externalCourseGrade()
+            : '';
 
         $this->reviewingId = $id;
         $this->reviewingType = $request->type();
         $this->reviewStatus = $request->status();
         $this->reviewComment = '';
-        $this->reviewEstimatedDate = $request->estimatedResolutionDate() ?? '';
+        $this->reviewEstimatedDate = $request->displayEstimatedResolutionDate() ?? '';
         $this->reviewDocumentType = '';
         $this->reviewDocumentFile = null;
+        $this->resolutionNumber = '';
+        $this->resolutionSessionNumber = '';
+        $this->resolutionActNumber = '';
+        $this->resolutionSessionDate = '';
         $this->resetValidation();
 
         $this->showViewModal = true;
@@ -289,14 +388,10 @@ class RequestComponent extends Component
     }
 
     /**
-     * "Historial de estados" — every transition ChangeRequestStatusUseCase
-     * has ever recorded for this request, oldest first. `previousStatus`
-     * is null only for a row that doesn't exist yet today: nothing in
-     * this module writes a status-history row at creation time (only
-     * Docencia's later reviews go through ChangeRequestStatusUseCase),
-     * so in practice every row here has both a previous and a new
-     * status — the null case is handled in the view purely so this
-     * doesn't silently misrender if/when that changes.
+     * Every transition recorded for this request, oldest first. The first
+     * row is the 'Received by Docencia' marker written at creation time
+     * (CreateRequestUseCase), which is the one case where previousStatus
+     * is null and the view renders "(nueva)".
      *
      * @return array<int, array{previousStatus: ?string, newStatus: string, comment: ?string, changedBy: string, createdAt: ?string}>
      */
@@ -305,7 +400,13 @@ class RequestComponent extends Component
         return RequestStatusHistoryModel::query()
             ->where('request_id', $requestId)
             ->with('user:id,name')
+            // created_at has whole-second precision, so the 3 rows a
+            // single Docencia decision can now produce (see
+            // ChangeRequestStatusUseCase) may tie on that column — id
+            // (insertion order) breaks the tie deterministically instead
+            // of leaving it to the database's default ordering.
             ->orderBy('created_at')
+            ->orderBy('id')
             ->get()
             ->map(fn (RequestStatusHistoryModel $entry) => [
                 'previousStatus' => $entry->previous_status,
@@ -318,39 +419,64 @@ class RequestComponent extends Component
     }
 
     /**
-     * "Guardar datos externos" — persists the external course's code/
-     * credits without touching status, so Docencia can record what the
-     * foreign transcript says before deciding Reconocer/No reconocer.
+     * Stages a Reconocer/No reconocer decision without persisting it.
+     * Still authorized like any review action, so the UI state cannot be
+     * toggled by an unauthorized direct Livewire call.
+     *
+     * Requires the course fields first, and a reason for "No reconocer".
+     * That reason is flagged under its own 'viewingCourseReason' key so
+     * the unrelated "Comentario adicional" textarea — which shares the
+     * $reviewComment property — is not marked as required too.
      */
-    public function saveExternalCourseData(SaveExternalCourseDataUseCase $useCase, FindRequestUseCase $findUseCase): void
+    public function markValidationDecision(FindRequestUseCase $findUseCase, string $decision): void
     {
+        if (! in_array($decision, ['Approved by Docencia', 'Denied by Docencia'], true)) {
+            return;
+        }
+
         $request = $findUseCase->handle($this->reviewingId);
         $this->authorize('review', $request);
 
-        $credits = $this->viewingExternalCourseCredits !== ''
-            ? (int) $this->viewingExternalCourseCredits
-            : null;
+        $this->validateExternalCourseFields();
 
-        $useCase->handle(
-            requestId: $this->reviewingId,
-            code: $this->viewingExternalCourseCode !== '' ? $this->viewingExternalCourseCode : null,
-            credits: $credits,
-        );
+        if ($decision === 'Denied by Docencia' && trim($this->reviewComment) === '') {
+            $this->addError('viewingCourseReason', __('A reason is required to not recognize this course.'));
 
-        $this->viewingRequest['externalCourseCode'] = $this->viewingExternalCourseCode !== '' ? $this->viewingExternalCourseCode : null;
-        $this->viewingRequest['externalCourseCredits'] = $credits;
+            return;
+        }
 
-        $this->externalCourseDataSaved = true;
-        $this->dispatch('toast', variant: 'success', text: __('External course data saved.'));
+        $this->stagedValidationDecision = $decision;
+        $this->resetErrorBag(['viewingCourseReason', 'reviewComment']);
     }
 
     /**
-     * Courses whose academic_records status still counts as completed
-     * progress toward the plan — same set as
-     * EloquentStudentAcademicProfileRepository::PROGRESS_STATUSES,
-     * duplicated here (Presentation has no business reading a
-     * Domain-adjacent Infrastructure class's private constant) rather
-     * than shared, since it's a two-line list unlikely to drift.
+     * Código/Créditos/Nota are required before either staging a Reconocer/
+     * No reconocer decision (markValidationDecision()) or actually
+     * resolving and sending to Registro (changeStatus()) — Registro's
+     * resolution document is generated from these same three fields, so
+     * neither action makes sense without them.
+     */
+    private function validateExternalCourseFields(): void
+    {
+        $this->validate(
+            rules: [
+                'viewingExternalCourseCode' => ['required', 'string', 'max:50'],
+                'viewingExternalCourseCredits' => ['required', 'integer', 'min:0', 'max:255'],
+                'viewingExternalCourseGrade' => ['required', 'numeric', 'min:0', 'max:100'],
+            ],
+            attributes: [
+                'viewingExternalCourseCode' => __('Code'),
+                'viewingExternalCourseCredits' => __('Credits'),
+                'viewingExternalCourseGrade' => __('Grade'),
+            ],
+        );
+    }
+
+    /**
+     * Statuses that count as completed progress toward the plan. Kept in
+     * sync with EloquentStudentAcademicProfileRepository by duplication
+     * rather than sharing, since Presentation should not read an
+     * Infrastructure constant.
      *
      * @var array<int, string>
      */
@@ -362,14 +488,19 @@ class RequestComponent extends Component
     private const CREDITED_STATUSES = ['Credited by Equivalence', 'Credited by Validation', 'Requirement Waived'];
 
     /**
-     * Docencia's "expediente del estudiante": identification, current
-     * career/plan, an aggregate summary (approved/failed/credited
-     * counts, weighted average grade, earned/total plan credits), and
-     * the full per-course academic record — the same academic_records
-     * rows the WaiverEngine reads via
-     * StudentAcademicProfileRepositoryInterface, surfaced here
-     * read-only so a reviewer can see the record behind an engine
-     * result without leaving the request detail modal.
+     * academic_periods.term (1-3) as the roman numeral used everywhere
+     * this university prints a period ("II - 2026"), for the student
+     * academic record table.
+     *
+     * @var array<int, string>
+     */
+    private const TERM_NUMERALS = [1 => 'I', 2 => 'II', 3 => 'III'];
+
+    /**
+     * The student's academic record: identification, career/plan, an
+     * aggregate summary and the per-course history. Read-only, so a
+     * reviewer can see the record behind an engine result without
+     * leaving the request detail modal.
      *
      * @return array{
      *     fullName: string, nationalId: string, email: ?string, active: bool,
@@ -450,11 +581,14 @@ class RequestComponent extends Component
             }
 
             return [
-                'course' => $record->course !== null ? "{$record->course->code} — {$record->course->name}" : (string) $record->course_id,
+                'code' => $record->course?->code ?? (string) $record->course_id,
+                'name' => $record->course?->name ?? '—',
                 'status' => $record->status,
                 'grade' => $record->grade !== null ? (string) $record->grade : null,
-                'period' => $record->academicPeriod !== null ? "{$record->academicPeriod->term} {$record->academicPeriod->year}" : '—',
-                'planLevel' => $info['levelNumber'] ?? null,
+                'period' => $record->academicPeriod !== null
+                    ? self::TERM_NUMERALS[$record->academicPeriod->term].' - '.$record->academicPeriod->year
+                    : '—',
+                'credits' => $info['credits'] ?? null,
             ];
         })->all();
 
@@ -489,26 +623,20 @@ class RequestComponent extends Component
     }
 
     /**
-     * Statuses whose name says "by Registro" — gated behind the
-     * 'finalize' ability on top of 'review', so Docencia (which only
-     * holds 'review') can never reach them even by crafting a direct
-     * changeStatus() call; the blade only renders their buttons under
-     * the same condition ($viewingRequest['canFinalize']).
+     * Statuses gated behind 'finalize' on top of 'review', so Docencia
+     * cannot reach them even through a crafted Livewire call.
      *
      * @var array<int, string>
      */
     private const REGISTRAR_ONLY_STATUSES = ['Verified by Registro', 'Approved by Registro', 'Denied by Registro'];
 
     /**
-     * $status lets the "Cursos a convalidar" table's Reconocer/No
-     * reconocer buttons drive this same method (with $reviewingId
-     * seeded by openViewModal()) as the merged-in "Cambiar estado a"
-     * button row — Reconocer/No reconocer are just Approved/Denied
-     * under another name, per the team's decision to keep a single
-     * status field rather than add a distinct per-course resolution
-     * field.
+     * $status lets the courses table's Reconocer/No reconocer buttons
+     * drive this same method: they are Approved/Denied under another
+     * name, the module keeping one status field rather than a separate
+     * per-course resolution field.
      */
-    public function changeStatus(ChangeRequestStatusUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase, ?string $status = null): void
+    public function changeStatus(ChangeRequestStatusUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase, SaveExternalCourseDataUseCase $externalCourseUseCase, ?string $status = null): void
     {
         if ($status !== null) {
             $this->reviewStatus = $status;
@@ -530,6 +658,35 @@ class RequestComponent extends Component
             return;
         }
 
+        // Server-side backstop for the Validation flow: the button is
+        // already disabled without a staged decision, and the course fields
+        // were validated when it was staged — re-checked here in case they
+        // were emptied afterward. Scoped to Validation because a Waiver's
+        // own buttons reach this method with the same status values.
+        if ($this->reviewingType === 'Validation' && in_array($this->reviewStatus, ['Approved by Docencia', 'Denied by Docencia'], true)) {
+            if ($this->stagedValidationDecision === null) {
+                $this->dispatch('toast', variant: 'danger', text: __('Mark Recognize or Do not recognize before resolving.'));
+
+                return;
+            }
+
+            $this->validateExternalCourseFields();
+        }
+
+        // Validation has no separate "Guardar datos externos" step any
+        // more — whatever is currently typed into Código/Créditos/Nota
+        // is persisted together with the Reconocer/No reconocer decision,
+        // right here, the moment "Resolver y enviar a Registro" is
+        // confirmed.
+        if ($this->reviewingType === 'Validation') {
+            $externalCourseUseCase->handle(
+                requestId: $this->reviewingId,
+                code: $this->viewingExternalCourseCode !== '' ? $this->viewingExternalCourseCode : null,
+                credits: $this->viewingExternalCourseCredits !== '' ? (int) $this->viewingExternalCourseCredits : null,
+                grade: $this->viewingExternalCourseGrade !== '' ? (float) $this->viewingExternalCourseGrade : null,
+            );
+        }
+
         try {
             $useCase->handle(
                 requestId: $this->reviewingId,
@@ -544,19 +701,104 @@ class RequestComponent extends Component
             return;
         }
 
+        $sentToRegistro = in_array($this->reviewingType, ['Requirement Waiver', 'Validation'], true)
+            && in_array($this->reviewStatus, ['Approved by Docencia', 'Denied by Docencia'], true);
+
         $this->refreshTable($this->freshRows($listUseCase));
-        $this->dispatch('toast', variant: 'success', text: __('Request status updated.'));
         $this->openViewModal($this->reviewingId, $findUseCase);
+
+        if ($sentToRegistro) {
+            $this->showSentToRegistroModal = true;
+        } else {
+            $this->dispatch('toast', variant: 'success', text: __('Request status updated.'));
+        }
+    }
+
+    public function closeSentToRegistroModal(): void
+    {
+        $this->showSentToRegistroModal = false;
     }
 
     /**
-     * "Guardar fecha" — the estimated resolution date's own save action,
-     * independent from changeStatus()/"Confirmar" so a reviewer can
-     * record/correct the date without also having to pick and confirm
-     * a status. Uses AssignEstimatedResolutionDateUseCase rather than
-     * ChangeRequestStatusUseCase precisely to avoid writing a same-
-     * status RequestStatusHistory row or firing a status-changed email
-     * for what isn't actually a status change.
+     * Registro's closing action (RSREC-001), confirmed in the blade
+     * before it runs. $decision is Registro's own call, independent of
+     * Docencia's. Generates and archives the resolution document and,
+     * on approval, registers the academic credit through
+     * ChangeRequestStatusUseCase. No email is sent: the student checks
+     * the outcome in the system. The request then leaves this bandeja
+     * for the history tab.
+     */
+    public function issueResolution(IssueResolutionUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase, ?string $decision = null): void
+    {
+        if (! in_array($decision, ['Approved by Registro', 'Denied by Registro'], true)) {
+            return;
+        }
+
+        $request = $findUseCase->handle($this->reviewingId);
+        $this->authorize('finalize', $request);
+
+        $this->validate(
+            rules: [
+                'resolutionNumber' => ['required', 'string', 'max:50'],
+                'resolutionSessionNumber' => ['required', 'string', 'max:50'],
+                'resolutionActNumber' => ['required', 'string', 'max:50'],
+                'resolutionSessionDate' => ['required', 'date'],
+                // Same allow-list as uploadReviewDocument() — optional
+                // here: Registro isn't required to attach anything extra
+                // beyond the resolution document itself.
+                'reviewDocumentFile' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            ],
+            attributes: [
+                'resolutionNumber' => __('Resolution number'),
+                'resolutionSessionNumber' => __('Session No.'),
+                'resolutionActNumber' => __('Act No.'),
+                'resolutionSessionDate' => __('Session date'),
+            ],
+        );
+
+        // Moved to permanent storage only now, at publish time — not
+        // when the file was picked — same "stage first, persist on the
+        // real action" pattern as Validation's external course fields.
+        $registroAttachment = $this->reviewDocumentFile
+            ? $this->storeAttachment($this->reviewDocumentFile, Request::REGISTRO_ATTACHMENT_DOCUMENT_TYPE)
+            : null;
+
+        try {
+            $useCase->handle(
+                requestId: $this->reviewingId,
+                decision: $decision,
+                resolution: new ResolutionData(
+                    resolutionNumber: $this->resolutionNumber,
+                    sessionNumber: $this->resolutionSessionNumber,
+                    actNumber: $this->resolutionActNumber,
+                    sessionDate: $this->resolutionSessionDate,
+                ),
+                reviewerId: Auth::id(),
+                additionalAttachment: $registroAttachment,
+            );
+        } catch (InvalidStatusTransitionException $e) {
+            $this->dispatch('toast', variant: 'danger', text: $e->getMessage());
+
+            return;
+        }
+
+        $this->reviewDocumentFile = null;
+        $this->refreshTable($this->freshRows($listUseCase));
+        $this->openViewModal($this->reviewingId, $findUseCase);
+        $this->showResolutionPublishedModal = true;
+    }
+
+    public function closeResolutionPublishedModal(): void
+    {
+        $this->showResolutionPublishedModal = false;
+    }
+
+    /**
+     * Saves the resolution date on its own, so a reviewer can record or
+     * correct it without also picking a status. Goes through
+     * AssignEstimatedResolutionDateUseCase rather than
+     * ChangeRequestStatusUseCase to avoid writing a same-status history
+     * row for something that is not a status change.
      */
     public function saveEstimatedDate(AssignEstimatedResolutionDateUseCase $useCase, ListRequestsUseCase $listUseCase, FindRequestUseCase $findUseCase): void
     {
@@ -577,14 +819,10 @@ class RequestComponent extends Component
     }
 
     /**
-     * Docencia attaching its own document to a request — same storage
-     * pipeline the student-facing forms use (StoresRequestAttachments,
-     * RequestAttachmentRepositoryInterface::attach()), just triggered
-     * from the detail modal instead of at creation time. Gated by the
-     * same 'review' ability as the rest of this modal rather than a new
-     * permission string, since every role that can review a request is
-     * exactly the role that should be able to attach supporting
-     * documents to it.
+     * Attaches a staff document through the same storage pipeline the
+     * student forms use, just triggered from the detail modal. Gated by
+     * 'review' rather than a new permission, since any role that can
+     * review a request should be able to attach documents to it.
      */
     public function uploadReviewDocument(RequestAttachmentRepositoryInterface $attachmentRepository, FindRequestUseCase $findUseCase): void
     {
@@ -593,12 +831,9 @@ class RequestComponent extends Component
 
         $this->validate([
             'reviewDocumentType' => ['required', 'string', 'max:150'],
-            // Same mime allow-list as everywhere else in this module
-            // (WaiverRequestForm/ValidationRequestForm) — bumped to
-            // 10MB to match the more generous of the two existing
-            // limits (the student Validation form's), since Docencia's
-            // own attachments are just as likely to be scanned multi-
-            // page documents.
+            // Same allow-list as the student forms, at the more generous
+            // of their two size limits: staff attachments are just as
+            // likely to be scanned multi-page documents.
             'reviewDocumentFile' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
         ]);
 
@@ -661,6 +896,7 @@ class RequestComponent extends Component
             page: $this->page,
             sortBy: $this->sortKey,
             sortDir: $this->sortDir,
+            filters: $this->activeTypeFilter(),
         );
 
         $paginator = new LengthAwarePaginator(
@@ -708,6 +944,7 @@ class RequestComponent extends Component
             search: $this->authorizedSearch(),
             sortBy: $this->sortKey,
             sortDir: $this->sortDir,
+            filters: $this->activeTypeFilter(),
         );
 
         $courses = $this->courseLabelsById();
@@ -768,10 +1005,8 @@ class RequestComponent extends Component
 
     private function freshRows(ListRequestsUseCase $useCase): array
     {
-        // Server mode never calls refreshTable's Alpine path (see
-        // InteractsWithDataTable::refreshTable — it's a no-op outside
-        // 'client' mode), so this only exists to satisfy the shared
-        // method signature used by save()/changeStatus()/delete().
+        // refreshTable() is a no-op outside client mode, so this exists
+        // only to satisfy the shared signature its callers use.
         return [];
     }
 

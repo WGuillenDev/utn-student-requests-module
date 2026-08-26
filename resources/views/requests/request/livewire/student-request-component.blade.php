@@ -235,7 +235,7 @@
                 } }}</span>
             <span>{{ $row['course'] }}</span>
             <span>
-                <span class="status-badge {{ $row['statusVariant'] }}">{{ __($row['status']) }}</span>
+                <span class="status-badge {{ $row['displayStatusVariant'] }}">{{ __($row['displayStatus']) }}</span>
             </span>
             <span>{{ $row['submittedAt'] ? date('Y-m-d', strtotime($row['submittedAt'])) : '—' }}</span>
             <div class="actions-cell">
@@ -277,6 +277,44 @@
 
     <x-ui.modal :show="$showViewModal" :title="__('Request detail')" close-action="closeViewModal" size="lg">
         @if ($viewingRequest)
+        @php
+            // Same two grouped milestones as staff's own "Avance de la
+            // solicitud" tracker (RequestComponent's detail view) — both
+            // pairs fire together because that's genuinely how the
+            // synchronous flow works (see ChangeRequestStatusUseCase's
+            // synthetic history rows), just worded here as a narrative
+            // the student can follow rather than internal status names.
+            // Shown first in this modal — before Tipo/Curso/Estado — so
+            // the student's first read of their own request is always
+            // "where is this in the process."
+            $studentProgressSentToRegistro = ! in_array($viewingRequest['status'], ['Pending Review', 'In Review'], true);
+            $studentProgressPublished = in_array($viewingRequest['status'], ['Approved by Registro', 'Denied by Registro'], true);
+        @endphp
+        <div class="form-field">
+            <label>{{ __('Request progress') }}</label>
+            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                <span style="display:flex; align-items:center; gap:6px; font-size:13px;">
+                    <span style="width:8px; height:8px; border-radius:50%; background:var(--badgeCustomText); flex-shrink:0;"></span>
+                    {{ __('Request received by Docencia') }}
+                </span>
+                <span style="display:flex; align-items:center; gap:6px; font-size:13px; opacity:{{ $studentProgressSentToRegistro ? '1' : '.45' }};">
+                    <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{{ $studentProgressSentToRegistro ? 'var(--badgeCustomText)' : 'var(--textMuted)' }};"></span>
+                    {{ __('Docencia sends the request to Registro') }}
+                </span>
+                <span style="display:flex; align-items:center; gap:6px; font-size:13px; opacity:{{ $studentProgressSentToRegistro ? '1' : '.45' }};">
+                    <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{{ $studentProgressSentToRegistro ? 'var(--badgeCustomText)' : 'var(--textMuted)' }};"></span>
+                    {{ __('Received by Registro') }}
+                </span>
+                <span style="display:flex; align-items:center; gap:6px; font-size:13px; opacity:{{ $studentProgressPublished ? '1' : '.45' }};">
+                    <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{{ $studentProgressPublished ? 'var(--badgeCustomText)' : 'var(--textMuted)' }};"></span>
+                    {{ __('Registro publishes the resolution') }}
+                </span>
+                <span style="display:flex; align-items:center; gap:6px; font-size:13px; opacity:{{ $studentProgressPublished ? '1' : '.45' }};">
+                    <span style="width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{{ $studentProgressPublished ? 'var(--badgeCustomText)' : 'var(--textMuted)' }};"></span>
+                    {{ __('Resolution published to the student') }}
+                </span>
+            </div>
+        </div>
         <div class="form-field">
             <label>{{ __('Type') }}</label>
             <p>{{ match ($viewingRequest['type']) {
@@ -321,11 +359,34 @@
         @endif
         <div class="form-field">
             <label>{{ __('Status') }}</label>
-            <p><span class="status-badge {{ $viewingRequest['statusVariant'] }}">{{ __($viewingRequest['status']) }}</span></p>
+            <p><span class="status-badge {{ $viewingRequest['displayStatusVariant'] }}">{{ __($viewingRequest['displayStatus']) }}</span></p>
         </div>
         <div class="form-field">
             <label>{{ __('Submission date') }}</label>
             <p>{{ $viewingRequest['submittedAt'] ? date('Y-m-d', strtotime($viewingRequest['submittedAt'])) : '—' }}</p>
+        </div>
+        <div class="form-field">
+            <label>{{ __('Document attached by Registro') }}</label>
+            @if ($viewingRequest['registroDocument'])
+            <div class="file-chip" style="flex-direction:column; align-items:stretch; gap:8px;">
+                <span class="file-chip-name">{{ $viewingRequest['registroDocument']['originalName'] }} ({{ $viewingRequest['registroDocument']['sizeKb'] }} KB)</span>
+                <div style="display:flex; gap:8px;">
+                    <a href="{{ route('requests.request.attachment-preview', ['fileId' => $viewingRequest['registroDocument']['id']]) }}"
+                       @click.prevent="window.open($el.href, 'documentPreview', 'width=900,height=750,resizable=yes,scrollbars=yes,noopener,noreferrer')"
+                       class="btn btn-secondary"
+                       style="text-decoration:none; flex:1; justify-content:center;">
+                        {{ __('Preview') }}
+                    </a>
+                    <a href="{{ route('requests.request.attachment-download', ['fileId' => $viewingRequest['registroDocument']['id']]) }}"
+                       class="btn btn-primary"
+                       style="text-decoration:none; flex:1; justify-content:center;">
+                        {{ __('Download') }}
+                    </a>
+                </div>
+            </div>
+            @else
+            <p style="opacity:.6;">{{ __('None') }}</p>
+            @endif
         </div>
         @endif
     </x-ui.modal>

@@ -94,44 +94,62 @@
             @endcan
 
             @if($canSeeStudentRequests)
-            <div x-data="{ open: true }" x-on:livewire:navigated.window="open = false">
-                <div class="nav-item nav-parent" @click="open = !open">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <div
+                x-data="{
+                    open: true,
+                    currentTab: new URLSearchParams(window.location.search).get('tab') || 'waiver',
+                }"
+                x-on:livewire:navigated.window="
+                    open = false;
+                    currentTab = new URLSearchParams(window.location.search).get('tab') || 'waiver';
+                "
+            >
+                <button type="button" class="nav-item nav-parent" @click="open = !open" :aria-expanded="open">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                         <polyline points="14 2 14 8 20 8"></polyline>
                         <line x1="9" y1="13" x2="15" y2="13"></line>
                         <line x1="9" y1="17" x2="13" y2="17"></line>
                     </svg>
                     <span class="nav-text" data-labels>{{ __('Student Requests') }}</span>
-                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
-                </div>
+                </button>
                 <div class="nav-children" :class="{ 'open': open }" data-labels>
-                    @can('viewAny', \Src\Requests\ValidationPrecedent\Domain\Entities\ValidationPrecedent::class)
-                    <a href="{{ route('requests.validation-precedent.index') }}" wire:navigate wire:current="active" class="nav-child">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                            <polyline points="9 6 15 12 9 18"></polyline>
-                        </svg>
-                        <span>{{ __('Course Validations') }}</span>
-                    </a>
-                    @endcan
-
-                    @can('viewAny', \Src\Requests\WaiverRule\Domain\Entities\WaiverRule::class)
-                    <a href="{{ route('requests.waiver-rule.index') }}" wire:navigate wire:current="active" class="nav-child">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                            <polyline points="9 6 15 12 9 18"></polyline>
-                        </svg>
-                        <span>{{ __('Waiver Rules') }}</span>
-                    </a>
-                    @endcan
-
                     @can('viewAny', \Src\Requests\Request\Domain\Entities\Request::class)
-                    <a href="{{ route('requests.request.index') }}" wire:navigate wire:current="active" class="nav-child">
+                    {{-- Three separate links into the same RequestComponent,
+                         one per ?tab= value it reads (see
+                         RequestComponent::$activeTab) — replaces the single
+                         combined "Requests Inbox" entry this submenu used to
+                         have. wire:current can't tell these apart: Livewire's
+                         own pathMatches() (js/directives/wire-current.js)
+                         only ever compares URL.pathname, even with .exact —
+                         it never looks at the query string — so all three
+                         would light up together since they share the same
+                         path. currentTab (above) is plain Alpine reading
+                         location.search instead, refreshed on the same
+                         livewire:navigated event Livewire uses internally
+                         (needed because this sidebar is x-persist'd across
+                         wire:navigate, so it never gets a fresh server
+                         render to recompute an @if from). --}}
+                    <a href="{{ route('requests.request.index', ['tab' => 'waiver']) }}" wire:navigate class="nav-child" :class="{ 'active': currentTab === 'waiver' }">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                             <polyline points="9 6 15 12 9 18"></polyline>
                         </svg>
-                        <span>{{ __('Requests Inbox') }}</span>
+                        <span>{{ __('Waiver inbox') }}</span>
+                    </a>
+                    <a href="{{ route('requests.request.index', ['tab' => 'validation']) }}" wire:navigate class="nav-child" :class="{ 'active': currentTab === 'validation' }">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                            <polyline points="9 6 15 12 9 18"></polyline>
+                        </svg>
+                        <span>{{ __('Validation inbox') }}</span>
+                    </a>
+                    <a href="{{ route('requests.request.index', ['tab' => 'history']) }}" wire:navigate class="nav-child" :class="{ 'active': currentTab === 'history' }">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                            <polyline points="9 6 15 12 9 18"></polyline>
+                        </svg>
+                        <span>{{ __('History') }}</span>
                     </a>
                     @endcan
                 </div>
@@ -186,17 +204,17 @@
             </a>
 
             <div x-data="{ open: true }" x-on:livewire:navigated.window="open = false">
-                <div class="nav-item nav-parent" @click="open = !open; setSection('grupos', currentSub || 'activos')">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <button type="button" class="nav-item nav-parent" @click="open = !open; setSection('grupos', currentSub || 'activos')" :aria-expanded="open">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                         <polyline points="2 17 12 22 22 17"></polyline>
                         <polyline points="2 12 12 17 22 12"></polyline>
                     </svg>
                     <span class="nav-text" data-labels>{{ __('Groups') }}</span>
-                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
-                </div>
+                </button>
                 <div class="nav-children" :class="{ 'open': open }" data-labels>
                     <a href="#" class="nav-child" @click.prevent="setSection('grupos', 'activos')">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -230,18 +248,18 @@
             </a>
 
             <div x-data="{ open: false }" x-on:livewire:navigated.window="open = false">
-                <div class="nav-item nav-parent" @click="open = !open; setSection('reportes', currentSub || 'reporte1')">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <button type="button" class="nav-item nav-parent" @click="open = !open; setSection('reportes', currentSub || 'reporte1')" :aria-expanded="open">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                         <polyline points="14 2 14 8 20 8"></polyline>
                         <line x1="8" y1="13" x2="16" y2="13"></line>
                         <line x1="8" y1="17" x2="12" y2="17"></line>
                     </svg>
                     <span class="nav-text" data-labels>{{ __('Reports') }}</span>
-                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
-                </div>
+                </button>
                 <div class="nav-children" :class="{ 'open': open }" data-labels>
                     <a href="#" class="nav-child" @click.prevent="setSection('reportes', 'reporte1')">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">

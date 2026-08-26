@@ -11,12 +11,12 @@ use Src\Requests\Request\Domain\Entities\Request;
 use Src\Requests\Request\Domain\Exceptions\RequestNotFoundException;
 
 /**
- * The real "edit" action for this CRUD: Request fields are not freely
- * editable once created (see manual §Request), what actually changes
- * over a Request's life is its status. Every transition is recorded in
- * RequestStatusHistory — that write happens here, right after the
- * Domain invariant (Request::changeStatus()) has approved the move, so
- * an invalid transition never reaches the history table either.
+ * The edit action for this CRUD: a Request's fields are fixed once
+ * created, and what changes over its life is the status.
+ *
+ * Every transition is written to RequestStatusHistory here, after the
+ * Domain invariant has approved the move, so an invalid transition never
+ * reaches the history table either.
  */
 final class ChangeRequestStatusUseCase
 {
@@ -52,11 +52,48 @@ final class ChangeRequestStatusUseCase
             userId: $reviewerId,
         );
 
-        // 'Approved by Registro' is a final status (Request::changeStatus()
-        // forbids transitioning out of it), so this can only fire once
-        // per request — no need to guard against re-registering the
-        // credit. Docencia's own 'Approved by Docencia' step does NOT
-        // register a credit yet — only Registro's final closing does.
+        // Docencia's decision is the same click that hands the request to
+        // Registro — this synchronous system has no separate "receive"
+        // action — so both milestones are logged as system rows
+        // (userId: null) alongside the real status change.
+        //
+        // 'Sent to Registro' and 'Received by Registro' are narrative
+        // markers, never values of requests.status, so nothing matching
+        // against the real enum downstream ever sees them.
+        if (in_array($saved->type(), ['Requirement Waiver', 'Validation'], true) && in_array($newStatus, ['Approved by Docencia', 'Denied by Docencia'], true)) {
+            $this->historyRepository->record(
+                requestId: $requestId,
+                previousStatus: $newStatus,
+                newStatus: 'Sent to Registro',
+                comment: null,
+                userId: null,
+            );
+
+            $this->historyRepository->record(
+                requestId: $requestId,
+                previousStatus: 'Sent to Registro',
+                newStatus: 'Received by Registro',
+                comment: null,
+                userId: null,
+            );
+        }
+
+        // The closing mirror of the block above, so the timeline reads
+        // through to publication instead of stopping at Registro's own
+        // decision. Same narrative-marker convention.
+        if (in_array($newStatus, ['Approved by Registro', 'Denied by Registro'], true)) {
+            $this->historyRepository->record(
+                requestId: $requestId,
+                previousStatus: $newStatus,
+                newStatus: 'Published by Registro',
+                comment: null,
+                userId: null,
+            );
+        }
+
+        // Only Registro's final approval registers the credit, never
+        // Docencia's. Being a final status, it can fire only once per
+        // request, so no guard against double-registering is needed.
         if ($newStatus === 'Approved by Registro') {
             $this->academicRecordRegistrar->registerCredit($saved);
         }

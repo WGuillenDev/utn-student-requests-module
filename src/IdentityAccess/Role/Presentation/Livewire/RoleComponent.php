@@ -34,11 +34,9 @@ class RoleComponent extends Component
     use InteractsWithExports;
 
     /**
-     * Roles are a small, reference-style catalog (typically a handful to
-     * a few dozen records) — client-side is the right default: the whole
-     * list ships once and Alpine resolves search/sort/pagination with
-     * zero further server round-trips. Flip to 'server' only if this
-     * catalog is ever expected to grow into the hundreds/thousands.
+     * A small catalog, so the whole list ships once and Alpine resolves
+     * search, sort and pagination without further round-trips. Switch to
+     * 'server' only if it grows past a few hundred rows.
      */
     protected string $tableMode = 'client';
 
@@ -93,12 +91,8 @@ class RoleComponent extends Component
                 $this->authorize('create', Role::class);
                 $createUseCase->handle($this->form->toDto());
             } else {
-                // RolePolicy::update() needs an actual Role instance as
-                // its 2nd parameter (it checks per-row rules, not just
-                // "can this user edit roles in general") — Role::class
-                // alone isn't enough for Laravel to call it, hence
-                // fetching the entity first instead of authorizing
-                // against the bare class string.
+                // RolePolicy::update() checks per-row rules, so it needs the
+                // Role instance rather than the bare class string.
                 $this->authorize('update', $findUseCase->handle($this->editingId));
                 $updateUseCase->handle($this->editingId, $this->form->toDto());
             }

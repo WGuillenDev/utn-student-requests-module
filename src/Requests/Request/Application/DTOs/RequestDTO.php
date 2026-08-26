@@ -9,21 +9,15 @@ use Src\Requests\Request\Domain\ValueObjects\RequestAttachment;
 final class RequestDTO
 {
     /**
+     * A Validation submission becomes one DTO per course, so the two
+     * fields below keep the confirmation email whole: only the first DTO
+     * of a batch carries $notify, and it lists every course of the
+     * submission through $batchCourseNames.
+     *
      * @param  array<int, RequestAttachment>  $attachments
-     * @param  ?string  $batchCourseNames  Validation only: every UTN
-     *   course name from the same submission (this one included) —
-     *   ValidationRequestForm::toDtos() turns one submission into
-     *   several independent Request rows, but the confirmation email
-     *   should still tell the student everything they just submitted,
-     *   not just the one course this particular Request is for.
-     * @param  bool  $notify  Whether CreateRequestUseCase should send the
-     *   "request submitted" email for this DTO. Validation submits
-     *   several DTOs (one Request per course) from a single click, but
-     *   the student should get exactly one confirmation email for that
-     *   whole submission — not one per course — so
-     *   ValidationRequestForm::toDtos() sets this true on only the first
-     *   of the batch; that single email's body still lists every course
-     *   via batchCourseNames.
+     * @param  ?string  $batchCourseNames  Validation only: every course name
+     *   from the same submission, this one included.
+     * @param  bool  $notify  Whether to send the submission email for this DTO.
      */
     public function __construct(
         public readonly int $studentId,

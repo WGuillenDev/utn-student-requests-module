@@ -299,12 +299,9 @@ class ValidationPrecedentComponent extends Component
     }
 
     /**
-     * Cross-context read (Academic), same reasoning already accepted for
-     * RequestComponent::courseOptions() / WaiverRuleComponent::courseOptions().
-     * Requires a career to be picked first — courses from every career
-     * mixed together made this select unusable, and a course only ever
-     * belongs to one career anyway, so there's no legitimate "no career"
-     * case to support here.
+     * Cross-context read into Academic. Requires a career first: every
+     * career's courses mixed together made the select unusable, and a
+     * course belongs to exactly one career anyway.
      *
      * @return array<int, array{id: int, label: string}>
      */

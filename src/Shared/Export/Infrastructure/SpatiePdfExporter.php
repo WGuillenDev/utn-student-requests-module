@@ -10,60 +10,22 @@ use Src\Shared\Export\Contracts\PdfExporterInterface;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Renders HTML to PDF via spatie/laravel-pdf, which delegates the
- * actual rendering to headless Chromium through Browsershot — the heavy
- * CSS/Tailwind layout work happens in the browser engine, never in the
- * PHP process itself.
+ * Renders HTML to PDF via spatie/laravel-pdf, which drives headless
+ * Chromium through Browsershot.
  *
- * Uses ->generatePdfContent() (raw bytes) rather than the package's own
- * ->name()/Responsable path deliberately: that path has a documented,
- * open issue specifically inside Livewire ("Livewire needs pdf as a
- * string not base64" — spatie/laravel-pdf discussion #120), where the
- * PDF arrives base64-encoded instead of as a clean binary stream.
- * Generating the bytes ourselves and handing them to Laravel's own
- * response()->streamDownload() sidesteps that entirely, and keeps this
- * adapter symmetric with SpatieExcelExporter.
- *
- * ->withBrowsershot()->setNodeModulePath() points Browsershot's child
- * Node process straight at the project's own node_modules explicitly,
- * rather than relying on Node's implicit directory-walking resolution
- * to find puppeteer on its own — that implicit lookup is where this
- * broke the first time (Windows, PHP spawning a Node child process from
- * public/ as its working directory, global npm install not on that
- * resolution path). Requires `npm install puppeteer` run from the
- * Laravel project root (not `public/`, not a global -g install).
- *
- * ->timeout(15) deliberately well under PHP's default 30s
- * max_execution_time: if Chrome/Puppeteer ever hangs on launch again
- * (missing Chrome binary, a stuck child process, antivirus interference
- * — all real things that happened during setup), Browsershot throws its
- * own catchable ProcessTimedOutException at 15s instead of PHP's blunt
- * execution-time FatalError killing the whole request at 30s with no
- * usable error message.
- *
- * ->showBackground() is not optional here — Chrome's print/PDF engine
- * omits background colors and images by default (the same convention
- * browsers use for "print this page" to save ink), which would silently
- * drop the navy header, the striped rows, everything that makes this
- * report look like the approved design instead of plain black-on-white
- * text. Without this call the PDF would still "work", just not match.
- *
- * ->addChromiumArguments([...]) disables a handful of background
- * network/telemetry calls Chrome makes on startup by default even in
- * headless mode (Safe Browsing list updates, component/extension
- * update checks, sync, etc.), plus a few flags that speed up a cold
- * start and matter more once this runs on a real Linux server than on
- * a Windows dev machine (disable-gpu skips graphics-driver init headless
- * doesn't need; disable-dev-shm-usage avoids Chrome writing shared
- * memory to a tmpfs that's tiny by default on many Docker/Linux hosts,
- * a very common source of random crashes in containerized deployments;
- * disable-software-rasterizer skips a GPU fallback path headless will
- * never use). None of these change what gets rendered — same DOM, same
- * layout, same PDF — only how fast and how reliably Chrome gets there.
- * Combined with the template now being fully self-contained (no Google
- * Fonts network call either, see table-pdf.blade.php), this removes
- * every network-dependent variable from render time — what's left is
- * just Chrome's own startup + layout, which is fast and consistent.
+ * Notable choices, each the result of a concrete failure during setup:
+ *  - generatePdfContent() instead of the package's Responsable path,
+ *    which returns base64 rather than a binary stream under Livewire
+ *    (spatie/laravel-pdf discussion #120).
+ *  - setNodeModulePath() resolves puppeteer explicitly; the implicit
+ *    lookup fails when PHP spawns Node with public/ as its cwd.
+ *    Requires `npm install puppeteer` at the project root.
+ *  - timeout(15) stays under PHP's 30s max_execution_time so a hung
+ *    Chrome raises a catchable exception instead of a fatal error.
+ *  - showBackground() is required; Chrome's print engine drops
+ *    background colors by default, which would strip the report styling.
+ *  - The Chromium arguments disable startup networking and telemetry.
+ *    They affect only startup cost and reliability, never the output.
  */
 final class SpatiePdfExporter implements PdfExporterInterface
 {
@@ -93,12 +55,9 @@ final class SpatiePdfExporter implements PdfExporterInterface
             })
             ->generatePdfContent();
 
-        // We already have the complete PDF in memory at this point (unlike
-        // the Excel export, which genuinely streams row-by-row without ever
-        // knowing the total size upfront) — so, unlike Excel, we CAN tell
-        // the browser the exact byte count via Content-Length. That gets
-        // you an accurate download progress bar instead of an "unknown
-        // size" spinner; free correctness, not a performance trick.
+        // The whole PDF is already in memory, so Content-Length can be set
+        // exactly — the browser shows a real progress bar rather than an
+        // unknown-size spinner.
         return response()->streamDownload(function () use ($pdfBytes): void {
             echo $pdfBytes;
         }, $filename, [

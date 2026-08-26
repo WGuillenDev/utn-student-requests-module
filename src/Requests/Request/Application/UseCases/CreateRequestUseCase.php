@@ -8,6 +8,7 @@ use Src\Requests\Request\Application\DTOs\RequestDTO;
 use Src\Requests\Request\Domain\Contracts\RequestAttachmentRepositoryInterface;
 use Src\Requests\Request\Domain\Contracts\RequestNotifierInterface;
 use Src\Requests\Request\Domain\Contracts\RequestRepositoryInterface;
+use Src\Requests\Request\Domain\Contracts\RequestStatusHistoryRepositoryInterface;
 use Src\Requests\Request\Domain\Entities\Request;
 use Src\Requests\Request\Domain\Exceptions\DuplicateWaiverRequestException;
 use Src\Requests\Request\Domain\Services\WaiverEngine;
@@ -15,20 +16,14 @@ use Src\Requests\ValidationPrecedent\Domain\Contracts\ValidationPrecedentReposit
 use Src\Requests\WaiverRule\Domain\Contracts\WaiverRuleRepositoryInterface;
 
 /**
- * Single-purpose orchestrator (SRP): turns a RequestDTO into a persisted
- * Request in 'Pending Review'. Depends on repository abstractions only —
- * the concrete adapters are wired in by the container (see
- * App\Providers\DomainServiceProvider).
+ * Turns a RequestDTO into a persisted Request in 'Pending Review'.
  *
- * For waiver requests, runs the WaiverEngine (ES-01) to compute the
- * immediate `engineResult`/`violatedRuleId` shown to the student. This
- * never changes `status`: every request — auto-resolved or not — still
- * starts 'Pending Review' and requires a human reviewer at Docencia to
- * close it (see Request::create()'s docblock for why).
+ * For waiver requests it runs the WaiverEngine (ES-01) to compute the
+ * immediate result shown to the student. That never affects status: every
+ * request still starts 'Pending Review' and needs a human reviewer.
  *
- * The ValidationPrecedent lookup is a separate, unrelated concern: it
- * only links a pre-existing catalog resolution (if any) to a new
- * Validation request for the Docencia inbox to see later.
+ * The ValidationPrecedent lookup is unrelated — it only links an existing
+ * catalog resolution to a new Validation request for Docencia to see.
  */
 final class CreateRequestUseCase
 {
@@ -39,6 +34,7 @@ final class CreateRequestUseCase
         private readonly WaiverRuleRepositoryInterface $waiverRuleRepository,
         private readonly WaiverEngine $waiverEngine,
         private readonly RequestNotifierInterface $notifier,
+        private readonly RequestStatusHistoryRepositoryInterface $historyRepository,
     ) {}
 
     public function handle(RequestDTO $dto): Request
@@ -61,6 +57,18 @@ final class CreateRequestUseCase
         );
 
         $saved = $this->repository->save($request);
+
+        // Opens the status history with a narrative marker — never a real
+        // requests.status value, same convention as the markers in
+        // ChangeRequestStatusUseCase — so the timeline covers the whole
+        // lifecycle rather than starting at the first decision.
+        $this->historyRepository->record(
+            requestId: $saved->id(),
+            previousStatus: null,
+            newStatus: 'Received by Docencia',
+            comment: null,
+            userId: null,
+        );
 
         if ($dto->attachments !== []) {
             $this->attachmentRepository->attach($saved->id(), $dto->attachments);

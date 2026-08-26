@@ -9,35 +9,22 @@ use Src\Shared\Export\Contracts\ExcelExporterInterface;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Streams rows to the browser via spatie/simple-excel (OpenSpout under
- * the hood) — memory stays flat regardless of row count, since nothing
- * is buffered into a PHP array or written to a temp file on disk first.
+ * Streams rows via spatie/simple-excel, keeping memory flat regardless
+ * of row count.
  *
- * Uses SimpleExcelWriter::streamDownload($filename) — NOT
- * SimpleExcelWriter::create('php://output') — deliberately.
- * create() picks its writer (XLSX/CSV/ODS) by inspecting the file
- * *extension* of the path you give it; 'php://output' has no extension,
- * so OpenSpout can't tell what to write and throws
- * UnsupportedTypeException. streamDownload($filename) reads the
- * extension from $filename ('roles.xlsx') to pick the right writer,
- * while still targeting the output stream internally.
- *
- * We still never call the package's own ->toBrowser() though: that
- * calls exit() internally (confirmed in the package source — see
- * spatie/simple-excel issue #143 on GitHub), which would terminate the
- * Livewire AJAX request mid-flight instead of returning a normal
- * response for Livewire to finish handling. Calling ->addRow() then
- * ->close() ourselves, inside our OWN response()->streamDownload()
- * callback, gets the correct writer AND avoids that exit() call.
+ * Two deliberate choices:
+ *  - SimpleExcelWriter::streamDownload() rather than create('php://output'),
+ *    because create() picks its writer from the path's file extension and
+ *    'php://output' has none, raising UnsupportedTypeException.
+ *  - addRow()/close() driven from our own streamDownload() callback rather
+ *    than the package's toBrowser(), which calls exit() internally and
+ *    would kill the Livewire request mid-flight (spatie/simple-excel #143).
  */
 final class SpatieExcelExporter implements ExcelExporterInterface
 {
     /**
-     * Flush PHP's output buffer periodically so bytes reach the browser
-     * progressively instead of arriving all at once at the very end —
-     * this is what actually makes the download start immediately for
-     * large exports, matching spatie/simple-excel's own documented
-     * recommendation.
+     * Flush interval, so bytes reach the browser progressively and a large
+     * export starts downloading immediately.
      */
     private const FLUSH_EVERY = 1000;
 

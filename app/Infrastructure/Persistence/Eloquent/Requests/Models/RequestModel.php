@@ -27,12 +27,13 @@ class RequestModel extends Model
     protected $fillable = [
         'student_id', 'type', 'course_id', 'required_course_id', 'waiver_justification',
         'origin_institution', 'external_course', 'external_course_code', 'external_course_credits',
-        'validation_precedent_id', 'engine_result', 'violated_rule_id', 'status',
+        'external_course_grade', 'validation_precedent_id', 'engine_result', 'violated_rule_id', 'status',
         'estimated_resolution_date', 'reviewer_id',
     ];
 
     protected $casts = [
         'estimated_resolution_date' => 'date',
+        'external_course_grade' => 'decimal:2',
     ];
 
     public function student(): BelongsTo

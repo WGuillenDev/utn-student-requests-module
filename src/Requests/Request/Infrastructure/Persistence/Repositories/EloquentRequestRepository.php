@@ -91,11 +91,10 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
     }
 
     /**
-     * Student-facing "Mis solicitudes" search: same idea as baseQuery()'s
-     * single search box (type/status matched against their *translated*
-     * Spanish labels, plus an exact submission-date match), but scoped to
-     * the 4 columns actually shown on that screen — no student lookup
-     * needed here, the query is already pinned to one studentId.
+     * Search for the student's own list. Like baseQuery()'s, it matches
+     * type and status against their translated labels plus an exact
+     * submission date, but only over the columns that screen shows — the
+     * query is already pinned to one student.
      */
     private function applyStudentSearch(Builder $query, string $search): void
     {
@@ -152,6 +151,7 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         $model->external_course = $request->externalCourse();
         $model->external_course_code = $request->externalCourseCode();
         $model->external_course_credits = $request->externalCourseCredits();
+        $model->external_course_grade = $request->externalCourseGrade();
         $model->validation_precedent_id = $request->validationPrecedentId();
         $model->engine_result = $request->engineResult();
         $model->violated_rule_id = $request->violatedRuleId();
@@ -170,11 +170,9 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
 
     public function existsApprovedWaiver(int $studentId, int $courseId, int $requiredCourseId): bool
     {
-        // Blocks a duplicate submission as soon as Docencia's substantive
-        // decision is made, not only once Registro finalizes it —
-        // otherwise a student could file another request for the same
-        // waiver while one is already approved and just awaiting
-        // Registro's closing step.
+        // Counts Docencia's approval too, not just Registro's: otherwise a
+        // student could re-file the same waiver while the first one is
+        // approved and merely awaiting Registro's closing step.
         return RequestModel::query()
             ->where('student_id', $studentId)
             ->where('type', 'Requirement Waiver')
@@ -185,21 +183,18 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
     }
 
     /**
-     * @param  array<string, mixed>  $filters  See interface docblock for
-     *                                         recognized keys — every one is optional and simply skipped when
-     *                                         absent or empty, so callers can pass a sparse array freely.
+     * @param  array<string, mixed>  $filters  See the interface for the
+     *   recognized keys. All optional, so a sparse array is fine.
      */
     private function baseQuery(?string $search, array $filters = []): Builder
     {
         $query = RequestModel::query()->with('student');
 
         if (filled($search)) {
-            // Docencia's inbox has no dedicated filter panel — the single
-            // search box doubles as the ES-04 filters, matching type and
-            // status against their *translated* Spanish labels (what's
-            // actually shown on screen) rather than the English enum
-            // values stored in the column, plus an exact received-date
-            // match when the term parses as YYYY-MM-DD.
+            // The inbox has no filter panel, so this single box doubles as
+            // the ES-04 filters: type and status match their translated
+            // labels rather than the English values stored in the column,
+            // plus an exact date match when the term parses as YYYY-MM-DD.
             $typeMatches = collect([
                 'Requirement Waiver' => __('Requirement Waiver'),
                 'Validation' => __('Course Validation'),
@@ -250,6 +245,10 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
             $query->where('status', $filters['status']);
         }
 
+        if (filled($filters['statusIn'] ?? null)) {
+            $query->whereIn('status', $filters['statusIn']);
+        }
+
         // "Program" (ES-04) is the requested course's owning career — a
         // request has no direct career column, so this reaches it through
         // the course relation rather than duplicating the FK on `requests`.
@@ -290,6 +289,7 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
             createdAt: $model->created_at?->toDateTimeString(),
             externalCourseCode: $model->external_course_code,
             externalCourseCredits: $model->external_course_credits,
+            externalCourseGrade: $model->external_course_grade !== null ? (float) $model->external_course_grade : null,
         );
     }
 }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Unit\Requests\Request\Domain;
 
 use PHPUnit\Framework\TestCase;
-use Src\Requests\Request\Domain\Contracts\HolidayCalendarInterface;
 use Src\Requests\Request\Domain\Entities\Request;
 use Src\Requests\Request\Domain\Exceptions\InvalidStatusTransitionException;
 
@@ -173,71 +172,34 @@ final class RequestTest extends TestCase
         $this->assertFalse($request->needsAutoEstimatedDate($createdAt->modify('+30 days')));
     }
 
-    public function test_auto_assign_estimated_resolution_date_skips_weekends(): void
+    public function test_auto_assign_estimated_resolution_date_is_24h_after_receipt_for_waivers(): void
     {
-        // Monday 2026-08-10 + 5 business days = Monday 2026-08-17,
-        // skipping the Sat/Sun in between — this is the concrete
-        // regression case for the "5 días hábiles" business rule.
-        $request = $this->reconstituteOpenRequest(createdAt: '2026-08-10 09:00:00');
+        $request = $this->reconstituteOpenRequest(createdAt: '2026-08-10 09:00:00', type: 'Requirement Waiver');
 
-        $request->autoAssignEstimatedResolutionDate($this->noHolidays());
+        $request->autoAssignEstimatedResolutionDate();
 
-        $this->assertSame('2026-08-17', $request->estimatedResolutionDate());
+        $this->assertSame('2026-08-11', $request->estimatedResolutionDate());
     }
 
-    public function test_auto_assign_estimated_resolution_date_from_a_friday(): void
+    public function test_auto_assign_estimated_resolution_date_is_24h_after_receipt_for_validations(): void
     {
-        // Friday 2026-08-14 + 5 business days: Mon 17, Tue 18, Wed 19,
-        // Thu 20, Fri 21 — two full weekends never enter the count.
-        $request = $this->reconstituteOpenRequest(createdAt: '2026-08-14 09:00:00');
+        // Validation used to follow ES-03's original "5 días hábiles"
+        // fallback; it now gets the same flat +24h rule as Requirement
+        // Waiver, regardless of weekends — there's no longer a
+        // per-type difference here.
+        $request = $this->reconstituteOpenRequest(createdAt: '2026-08-14 09:00:00', type: 'Validation');
 
-        $request->autoAssignEstimatedResolutionDate($this->noHolidays());
+        $request->autoAssignEstimatedResolutionDate();
 
-        $this->assertSame('2026-08-21', $request->estimatedResolutionDate());
+        $this->assertSame('2026-08-15', $request->estimatedResolutionDate());
     }
 
-    public function test_auto_assign_estimated_resolution_date_skips_a_holiday(): void
-    {
-        // Monday 2026-08-10 + 5 business days is normally 2026-08-17
-        // (see the sibling test above); with 2026-08-14 (Friday)
-        // reported as a holiday by the calendar port, that day no
-        // longer counts and the estimate pushes to 2026-08-18.
-        $request = $this->reconstituteOpenRequest(createdAt: '2026-08-10 09:00:00');
-
-        $calendar = new class implements HolidayCalendarInterface
-        {
-            public function isHoliday(\DateTimeImmutable $date): bool
-            {
-                return $date->format('Y-m-d') === '2026-08-14';
-            }
-        };
-
-        $request->autoAssignEstimatedResolutionDate($calendar);
-
-        $this->assertSame('2026-08-18', $request->estimatedResolutionDate());
-    }
-
-    /**
-     * Test double for tests that only care about the weekend logic —
-     * every date is reported as a normal working day.
-     */
-    private function noHolidays(): HolidayCalendarInterface
-    {
-        return new class implements HolidayCalendarInterface
-        {
-            public function isHoliday(\DateTimeImmutable $date): bool
-            {
-                return false;
-            }
-        };
-    }
-
-    private function reconstituteOpenRequest(string $createdAt, ?string $estimatedResolutionDate = null): Request
+    private function reconstituteOpenRequest(string $createdAt, ?string $estimatedResolutionDate = null, string $type = 'Requirement Waiver'): Request
     {
         return Request::reconstitute(
             id: 1,
             studentId: 1,
-            type: 'Requirement Waiver',
+            type: $type,
             courseId: 10,
             requiredCourseId: null,
             waiverJustification: null,

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Src\Requests\Request\Presentation\Livewire;
 
 use App\Infrastructure\Persistence\Eloquent\Academic\Models\CourseModel;
+use App\Infrastructure\Persistence\Eloquent\Documents\Models\FileModel;
+use App\Infrastructure\Persistence\Eloquent\Requests\Models\RequestModel;
 use App\Infrastructure\Persistence\Eloquent\Students\Models\StudentModel;
 use App\Livewire\Concerns\InteractsWithDataTable;
 use Illuminate\Contracts\View\View;
@@ -23,13 +25,12 @@ use Src\Requests\Request\Presentation\Livewire\Forms\ValidationRequestForm;
 use Src\Requests\Request\Presentation\Livewire\Forms\WaiverRequestForm;
 
 /**
- * Student self-service screen (ES-01/ES-02/ES-03): 3 tabs — new waiver
- * request, new validation request, and a read-only "my requests" list.
- * Deliberately separate from RequestComponent (the staff inbox): the
- * two screens have opposite authorization shapes (RequestPolicy::
- * viewAny() denies the Estudiante role outright, see that policy's
- * docblock) and this one has no student picker, no edit/delete, and no
- * review action — only create + read-your-own.
+ * Student self-service screen (ES-01/ES-02/ES-03): new waiver request,
+ * new validation request, and a read-only list of one's own requests.
+ *
+ * Separate from RequestComponent because the two have opposite
+ * authorization shapes — RequestPolicy::viewAny() denies students the
+ * staff inbox outright — and this screen only ever creates or reads.
  */
 class StudentRequestComponent extends Component
 {
@@ -95,30 +96,20 @@ class StudentRequestComponent extends Component
             $this->validateOnly($property);
         }
 
-        // Same idea for "requisito no cumplido" == "curso a matricular":
-        // check as soon as both selects have a value, instead of waiting
-        // for submitWaiver(). requiredCourseId carries the `different`
-        // rule, so re-checking it covers both edit orders (course picked
-        // first, or the requirement picked first). Skipped while
-        // requiredCourseId is still empty so a bare courseId pick doesn't
-        // trigger a premature "required" error on the other field.
+        // Flags "requisito no cumplido" == "curso a matricular" as soon as
+        // both selects have a value. requiredCourseId carries the `different`
+        // rule, so re-checking it covers either edit order; skipped while it
+        // is empty to avoid a premature "required" error.
         if ($property === 'waiverForm.requiredCourseId'
             || ($property === 'waiverForm.courseId' && $this->waiverForm->requiredCourseId !== null)) {
             $this->validateOnly('waiverForm.requiredCourseId');
         }
 
-        // Validation's course rows carry a `distinct` rule (no picking
-        // the same UTN course twice across rows), but checked by hand
-        // here instead of via validateOnly(): Livewire's Form::
-        // validateOnly() narrows a wildcarded field's sibling data down
-        // to just the one row being checked (see HandlesValidation::
-        // filterCollectionDataDownToSpecificKeys()) before handing it to
-        // the Validator, which leaves nothing for `distinct` to compare
-        // against — it always passes. submitValidation()'s full
-        // $this->validationForm->validate() call doesn't narrow
-        // anything, so the real `distinct` rule still catches this at
-        // submit time regardless; this is only needed for the live,
-        // as-you-pick feedback.
+        // Duplicate courses are checked by hand rather than through
+        // validateOnly(), which narrows a wildcarded field down to the single
+        // row being validated and so leaves `distinct` nothing to compare
+        // against. The rule still catches duplicates at submit time; this is
+        // only for live feedback as the student picks.
         if (preg_match('/^validationForm\.courses\.\d+\.courseId$/', $property) === 1) {
             $this->flagDuplicateCourses();
         }
@@ -197,14 +188,11 @@ class StudentRequestComponent extends Component
         unset($this->validationForm->courses[$index]);
         $this->validationForm->courses = array_values($this->validationForm->courses);
 
-        // Removing a row re-indexes the rest, and may have just deleted
-        // the other half of a duplicate pair — re-run the check so a
-        // remaining row's error clears immediately instead of only on
-        // its next courseId change. The trailing index the array no
-        // longer has (courses shrank by one) needs an explicit reset
-        // too: flagDuplicateCourses() only touches indices still in the
-        // array, so its error would otherwise linger in the bag and
-        // resurface if a later addValidationCourse() reuses that index.
+        // Removing a row re-indexes the rest and may have deleted half of a
+        // duplicate pair, so the check re-runs to clear the survivor's error.
+        // The now-missing trailing index is reset explicitly, since
+        // flagDuplicateCourses() only touches indices still in the array and
+        // a stale error there would resurface if the index is reused.
         $this->resetErrorBag("validationForm.courses.{$oldLastIndex}.courseId");
         $this->flagDuplicateCourses();
     }
@@ -246,15 +234,10 @@ class StudentRequestComponent extends Component
         $courseLabels = $this->courseLabelsById();
         $this->viewingRequest = $this->toRow($request, $courseLabels);
 
-        // Each course line from a Validation submission is its own
-        // independent Request — reviewed and resolved on its own by
-        // Docencia/Registro, potentially with a different outcome per
-        // course (see ValidationRequestForm's docblock). So "Ver" on one
-        // of them shows only that one course, not its siblings from the
-        // same submission — unlike the confirmation email, which does
-        // list every course together (see RequestSubmittedNotification).
-        // Table format kept (not the old stacked fields) for visual
-        // consistency even with a single row.
+        // Each course of a Validation submission is its own Request, resolved
+        // independently, so the detail shows only this one — unlike the
+        // confirmation email, which lists the whole submission. Kept in table
+        // form for consistency even with a single row.
         if ($request->type() === 'Validation') {
             $this->viewingRequest['batchCourses'] = [[
                 'course' => $courseLabels[$request->courseId()] ?? (string) $request->courseId(),
@@ -262,6 +245,22 @@ class StudentRequestComponent extends Component
                 'originInstitution' => $request->originInstitution(),
             ]];
         }
+
+        // Null until Registro publishes a resolution with a file attached.
+        // The view then shows "Ninguno" rather than hiding the section, so a
+        // student checking early sees the field exists.
+        $registroFile = FileModel::query()
+            ->where('fileable_type', RequestModel::class)
+            ->where('fileable_id', $request->id())
+            ->where('document_type', Request::REGISTRO_ATTACHMENT_DOCUMENT_TYPE)
+            ->latest('id')
+            ->first(['id', 'original_name', 'size_bytes']);
+
+        $this->viewingRequest['registroDocument'] = $registroFile ? [
+            'id' => $registroFile->id,
+            'originalName' => $registroFile->original_name,
+            'sizeKb' => (int) round($registroFile->size_bytes / 1024),
+        ] : null;
 
         $this->showViewModal = true;
     }
@@ -328,13 +327,9 @@ class StudentRequestComponent extends Component
     }
 
     /**
-     * Scoped to the courses of the career(s) the student is enrolled in
-     * (via student_study_plan → study_plans.career_id), plus any
-     * cross-cutting course with no career_id (is_service = true) — so a
-     * Salud Ocupacional student never sees Ingeniería del Software
-     * courses in this dropdown, and vice versa. Falls back to the full
-     * catalog if the student has no enrollment on file, so the form
-     * never renders an empty dropdown.
+     * Courses of the student's own career(s), plus cross-cutting service
+     * courses that belong to none. Falls back to the full catalog when the
+     * student has no enrollment on file, so the dropdown is never empty.
      *
      * @return array<int, array{id: int, label: string}>
      */
@@ -401,6 +396,8 @@ class StudentRequestComponent extends Component
             'waiverJustification' => $request->waiverJustification(),
             'status' => $request->status(),
             'statusVariant' => $this->statusVariant($request->status()),
+            'displayStatus' => $this->displayStatus($request->status()),
+            'displayStatusVariant' => $this->displayStatusVariant($request->status()),
             'result' => $request->engineResult(),
             'submittedAt' => $request->createdAt(),
             'estimatedDate' => $request->estimatedResolutionDate(),
@@ -416,6 +413,31 @@ class StudentRequestComponent extends Component
             in_array($status, ['Denied by Docencia', 'Denied by Registro'], true) => 'negative',
             $status === 'Pending Review' => 'pending',
             default => '',
+        };
+    }
+
+    /**
+     * Collapses the internal status to the three outcomes a student is
+     * shown: pending until Registro publishes, then Aprobada or Denegada.
+     * Docencia's decision is an internal step, not the final word.
+     *
+     * The real $status is left untouched — the progress tracker needs it.
+     */
+    private function displayStatus(string $status): string
+    {
+        return match ($status) {
+            'Approved by Registro' => 'Approved',
+            'Denied by Registro' => 'Denied',
+            default => 'Pending Review',
+        };
+    }
+
+    private function displayStatusVariant(string $status): string
+    {
+        return match ($status) {
+            'Approved by Registro' => 'positive',
+            'Denied by Registro' => 'negative',
+            default => 'pending',
         };
     }
 }

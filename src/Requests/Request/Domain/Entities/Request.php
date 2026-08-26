@@ -4,33 +4,36 @@ declare(strict_types=1);
 
 namespace Src\Requests\Request\Domain\Entities;
 
-use Src\Requests\Request\Domain\Contracts\HolidayCalendarInterface;
 use Src\Requests\Request\Domain\Exceptions\InvalidStatusTransitionException;
 
 /**
- * Request — Aggregate Root of the Requests bounded context.
+ * Aggregate Root of the Requests bounded context. Pure PHP, no framework
+ * coupling.
  *
- * Pure PHP. Zero framework coupling — no Eloquent, no Illuminate imports.
- * Covers both request types stored in the same table (`type` column):
- * "Requirement Waiver" and "Validation". The distinguishing fields for
- * each type (originInstitution/externalCourse for Validation,
- * requiredCourseId for Waiver) are simply nullable here — validating
- * which ones are mandatory per type is an Application-layer concern
- * (the DTO/UseCase knows which flow created it), not a Domain invariant.
+ * Covers both types stored in the same table: "Requirement Waiver" and
+ * "Validation". Each type's distinguishing fields are nullable here —
+ * which ones are mandatory per type is an Application concern, since the
+ * use case knows which flow created the request.
  */
 final class Request
 {
     /**
-     * A request in either of these statuses is closed. It cannot be
-     * moved to any other status — reopening a resolved request is not
-     * supported; a new request must be filed instead.
+     * Closed statuses: a request here cannot move again, and reopening is
+     * not supported — a new request must be filed.
      *
-     * 'Approved by Docencia'/'Denied by Docencia' are deliberately NOT
-     * final: they're Docencia's substantive decision, but the request
-     * only truly closes once Registro applies the matching final status
-     * (see RequestPolicy::finalize(), gated to the Registro role only).
+     * Docencia's own decisions are deliberately not final. They are its
+     * substantive verdict, but the request only closes once Registro
+     * applies the matching final status.
      */
     private const FINAL_STATUSES = ['Approved by Registro', 'Denied by Registro'];
+
+    /**
+     * files.document_type for the optional file Registro attaches when
+     * issuing a resolution. A fixed marker rather than free text, so both
+     * the staff and student components can find that file reliably.
+     * Distinct from 'resolution', the generated PDF's own type.
+     */
+    public const REGISTRO_ATTACHMENT_DOCUMENT_TYPE = 'registro_attachment';
 
     private function __construct(
         private readonly ?int $id,
@@ -43,6 +46,7 @@ final class Request
         private ?string $externalCourse,
         private ?string $externalCourseCode,
         private ?int $externalCourseCredits,
+        private ?float $externalCourseGrade,
         private ?int $validationPrecedentId,
         private ?string $engineResult,
         private ?int $violatedRuleId,
@@ -53,12 +57,10 @@ final class Request
     ) {}
 
     /**
-     * `engineResult`/`violatedRuleId` may be populated at creation by
-     * the WaiverEngine (ES-01's immediate result shown to the student).
-     * `status` always starts 'Pending Review' regardless — by design,
-     * every request (auto-resolved or not) still requires a human
-     * reviewer at Docencia to close it, so it stays visible in the
-     * ES-04 inbox and gets a proper user+date audit trail (ES-03).
+     * The WaiverEngine may set engineResult/violatedRuleId here (ES-01's
+     * immediate feedback), but status always starts 'Pending Review':
+     * every request still needs a human reviewer to close it, so it stays
+     * in the inbox and keeps a full audit trail (ES-03/ES-04).
      */
     public static function create(
         int $studentId,
@@ -83,6 +85,7 @@ final class Request
             externalCourse: $externalCourse,
             externalCourseCode: null,
             externalCourseCredits: null,
+            externalCourseGrade: null,
             validationPrecedentId: $validationPrecedentId,
             engineResult: $engineResult,
             violatedRuleId: $violatedRuleId,
@@ -111,6 +114,7 @@ final class Request
         ?string $createdAt = null,
         ?string $externalCourseCode = null,
         ?int $externalCourseCredits = null,
+        ?float $externalCourseGrade = null,
     ): self {
         return new self(
             id: $id,
@@ -123,6 +127,7 @@ final class Request
             externalCourse: $externalCourse,
             externalCourseCode: $externalCourseCode,
             externalCourseCredits: $externalCourseCredits,
+            externalCourseGrade: $externalCourseGrade,
             validationPrecedentId: $validationPrecedentId,
             engineResult: $engineResult,
             violatedRuleId: $violatedRuleId,
@@ -158,17 +163,16 @@ final class Request
     }
 
     /**
-     * Validation-only: the external course's own code/credit count,
-     * captured by Docencia while reviewing (never at submission time),
-     * to compare against the equivalent UTN course before deciding
-     * Reconocer/No reconocer. Deliberately not gated by isFinal() — a
-     * reviewer may correct these while still deciding, same rationale
-     * as assignEstimatedResolutionDate().
+     * Validation only: the external course's code, credits and grade,
+     * captured by Docencia during review to compare against the UTN
+     * equivalent. Not gated by isFinal(), since a reviewer may correct
+     * them while still deciding.
      */
-    public function setExternalCourseData(?string $code, ?int $credits): void
+    public function setExternalCourseData(?string $code, ?int $credits, ?float $grade): void
     {
         $this->externalCourseCode = $code;
         $this->externalCourseCredits = $credits;
+        $this->externalCourseGrade = $grade;
     }
 
     /**
@@ -197,25 +201,16 @@ final class Request
     }
 
     /**
-     * "5 días hábiles a partir de la fecha de recepción" — Monday
-     * through Friday, excluding national holidays as reported by the
-     * injected HolidayCalendarInterface port (see
-     * NagerDateHolidayCalendar for the concrete adapter).
+     * The resolution date is receipt + 24h for every request type. Since
+     * needsAutoEstimatedDate() only allows this once that same period has
+     * elapsed, the resulting deadline is effectively now, flagging the
+     * request as already due.
      */
-    public function autoAssignEstimatedResolutionDate(HolidayCalendarInterface $calendar): void
+    public function autoAssignEstimatedResolutionDate(): void
     {
-        $date = new \DateTimeImmutable($this->createdAt);
-        $businessDaysAdded = 0;
-
-        while ($businessDaysAdded < 5) {
-            $date = $date->modify('+1 day');
-
-            if ((int) $date->format('N') < 6 && ! $calendar->isHoliday($date)) {
-                $businessDaysAdded++;
-            }
-        }
-
-        $this->estimatedResolutionDate = $date->format('Y-m-d');
+        $this->estimatedResolutionDate = (new \DateTimeImmutable($this->createdAt))
+            ->modify('+24 hours')
+            ->format('Y-m-d');
     }
 
     public function id(): ?int
@@ -268,6 +263,11 @@ final class Request
         return $this->externalCourseCredits;
     }
 
+    public function externalCourseGrade(): ?float
+    {
+        return $this->externalCourseGrade;
+    }
+
     public function validationPrecedentId(): ?int
     {
         return $this->validationPrecedentId;
@@ -291,6 +291,25 @@ final class Request
     public function estimatedResolutionDate(): ?string
     {
         return $this->estimatedResolutionDate;
+    }
+
+    /**
+     * The date shown in the request detail: the stored value once set,
+     * or the same receipt + 24h computed on the fly during the first day,
+     * so the view never shows a blank for a date that is already known.
+     *
+     * Read-only — unlike autoAssignEstimatedResolutionDate(), this never
+     * mutates or persists anything.
+     */
+    public function displayEstimatedResolutionDate(): ?string
+    {
+        if ($this->estimatedResolutionDate !== null || $this->createdAt === null) {
+            return $this->estimatedResolutionDate;
+        }
+
+        return (new \DateTimeImmutable($this->createdAt))
+            ->modify('+24 hours')
+            ->format('Y-m-d');
     }
 
     public function reviewerId(): ?int
