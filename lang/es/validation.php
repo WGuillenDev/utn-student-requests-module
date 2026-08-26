@@ -181,8 +181,11 @@ return [
     */
 
     'custom' => [
-        'attribute-name' => [
-            'rule-name' => 'custom-message',
+        'requiredCourseId' => [
+            'different' => 'Este curso que seleccionaste debe ser distinto al de matricular.',
+        ],
+        'courses.*.courseId' => [
+            'distinct' => 'Ya elegiste este curso de la UTN.',
         ],
     ],
 

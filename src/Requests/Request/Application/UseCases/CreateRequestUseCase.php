@@ -66,7 +66,9 @@ final class CreateRequestUseCase
             $this->attachmentRepository->attach($saved->id(), $dto->attachments);
         }
 
-        $this->notifier->notifyRequestSubmitted($saved);
+        if ($dto->notify) {
+            $this->notifier->notifyRequestSubmitted($saved, $dto->batchCourseNames);
+        }
 
         return $saved;
     }

@@ -19,5 +19,9 @@ use Src\Requests\Request\Domain\Entities\Request;
  */
 interface RequestNotifierInterface
 {
-    public function notifyRequestSubmitted(Request $request): void;
+    /**
+     * @param  ?string  $batchCourseNames  Validation only: every UTN
+     *   course name from the same submission — see RequestDTO's docblock.
+     */
+    public function notifyRequestSubmitted(Request $request, ?string $batchCourseNames = null): void;
 }

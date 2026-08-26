@@ -56,8 +56,9 @@ final class ListRequestsUseCase
         int $page = 1,
         ?string $sortBy = null,
         string $sortDir = 'asc',
+        ?string $search = null,
     ): array {
-        $result = $this->repository->paginateForStudent($studentId, $perPage, $page, $sortBy, $sortDir);
+        $result = $this->repository->paginateForStudent($studentId, $perPage, $page, $sortBy, $sortDir, $search);
 
         $result['items'] = $this->estimatedResolutionDateAssigner->ensureAssignedForAll($result['items']);
 

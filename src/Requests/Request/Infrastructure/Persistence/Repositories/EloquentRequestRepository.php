@@ -71,8 +71,13 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
         int $page,
         ?string $sortBy = null,
         string $sortDir = 'asc',
+        ?string $search = null,
     ): array {
         $query = RequestModel::query()->with('student')->where('student_id', $studentId);
+
+        if (filled($search)) {
+            $this->applyStudentSearch($query, $search);
+        }
 
         $column = in_array($sortBy, self::SORTABLE_COLUMNS, true) ? $sortBy : 'created_at';
         $direction = $sortDir === 'desc' ? 'desc' : 'asc';
@@ -83,6 +88,53 @@ final class EloquentRequestRepository implements RequestRepositoryInterface
             'items' => array_map($this->toDomain(...), $paginator->items()),
             'total' => $paginator->total(),
         ];
+    }
+
+    /**
+     * Student-facing "Mis solicitudes" search: same idea as baseQuery()'s
+     * single search box (type/status matched against their *translated*
+     * Spanish labels, plus an exact submission-date match), but scoped to
+     * the 4 columns actually shown on that screen — no student lookup
+     * needed here, the query is already pinned to one studentId.
+     */
+    private function applyStudentSearch(Builder $query, string $search): void
+    {
+        $typeMatches = collect([
+            'Requirement Waiver' => __('Requirement Waiver'),
+            'Validation' => __('Course Validation'),
+        ])->filter(fn (string $label): bool => stripos($label, $search) !== false)->keys()->all();
+
+        $statusMatches = collect([
+            'Pending Review' => __('Pending Review'),
+            'In Review' => __('In Review'),
+            'Verified by Registro' => __('Verified by Registro'),
+            'Approved by Docencia' => __('Approved by Docencia'),
+            'Denied by Docencia' => __('Denied by Docencia'),
+            'Approved by Registro' => __('Approved by Registro'),
+            'Denied by Registro' => __('Denied by Registro'),
+        ])->filter(fn (string $label): bool => stripos($label, $search) !== false)->keys()->all();
+
+        $searchDate = \DateTime::createFromFormat('Y-m-d', $search);
+        $isExactDate = $searchDate !== false && $searchDate->format('Y-m-d') === $search;
+
+        $query->where(function ($outer) use ($search, $typeMatches, $statusMatches, $isExactDate): void {
+            $outer->whereHas('course', function ($courseQuery) use ($search): void {
+                $courseQuery->where('name', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%");
+            });
+
+            if ($typeMatches !== []) {
+                $outer->orWhereIn('type', $typeMatches);
+            }
+
+            if ($statusMatches !== []) {
+                $outer->orWhereIn('status', $statusMatches);
+            }
+
+            if ($isExactDate) {
+                $outer->orWhereDate('created_at', $search);
+            }
+        });
     }
 
     public function save(Request $request): Request

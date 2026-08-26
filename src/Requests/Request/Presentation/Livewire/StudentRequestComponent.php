@@ -94,6 +94,50 @@ class StudentRequestComponent extends Component
         if (in_array($property, self::FILE_FIELDS, true)) {
             $this->validateOnly($property);
         }
+
+        // Same idea for "requisito no cumplido" == "curso a matricular":
+        // check as soon as both selects have a value, instead of waiting
+        // for submitWaiver(). requiredCourseId carries the `different`
+        // rule, so re-checking it covers both edit orders (course picked
+        // first, or the requirement picked first). Skipped while
+        // requiredCourseId is still empty so a bare courseId pick doesn't
+        // trigger a premature "required" error on the other field.
+        if ($property === 'waiverForm.requiredCourseId'
+            || ($property === 'waiverForm.courseId' && $this->waiverForm->requiredCourseId !== null)) {
+            $this->validateOnly('waiverForm.requiredCourseId');
+        }
+
+        // Validation's course rows carry a `distinct` rule (no picking
+        // the same UTN course twice across rows), but checked by hand
+        // here instead of via validateOnly(): Livewire's Form::
+        // validateOnly() narrows a wildcarded field's sibling data down
+        // to just the one row being checked (see HandlesValidation::
+        // filterCollectionDataDownToSpecificKeys()) before handing it to
+        // the Validator, which leaves nothing for `distinct` to compare
+        // against — it always passes. submitValidation()'s full
+        // $this->validationForm->validate() call doesn't narrow
+        // anything, so the real `distinct` rule still catches this at
+        // submit time regardless; this is only needed for the live,
+        // as-you-pick feedback.
+        if (preg_match('/^validationForm\.courses\.\d+\.courseId$/', $property) === 1) {
+            $this->flagDuplicateCourses();
+        }
+    }
+
+    private function flagDuplicateCourses(): void
+    {
+        $counts = collect($this->validationForm->courses)->pluck('courseId')->filter()->countBy();
+
+        foreach (array_keys($this->validationForm->courses) as $index) {
+            $field = "validationForm.courses.{$index}.courseId";
+            $courseId = $this->validationForm->courses[$index]['courseId'];
+
+            if ($courseId !== null && ($counts[$courseId] ?? 0) > 1) {
+                $this->addError($field, __('You already selected this UTN course.'));
+            } else {
+                $this->resetErrorBag($field);
+            }
+        }
     }
 
     /**
@@ -148,8 +192,21 @@ class StudentRequestComponent extends Component
             return;
         }
 
+        $oldLastIndex = count($this->validationForm->courses) - 1;
+
         unset($this->validationForm->courses[$index]);
         $this->validationForm->courses = array_values($this->validationForm->courses);
+
+        // Removing a row re-indexes the rest, and may have just deleted
+        // the other half of a duplicate pair — re-run the check so a
+        // remaining row's error clears immediately instead of only on
+        // its next courseId change. The trailing index the array no
+        // longer has (courses shrank by one) needs an explicit reset
+        // too: flagDuplicateCourses() only touches indices still in the
+        // array, so its error would otherwise linger in the bag and
+        // resurface if a later addValidationCourse() reuses that index.
+        $this->resetErrorBag("validationForm.courses.{$oldLastIndex}.courseId");
+        $this->flagDuplicateCourses();
     }
 
     public function removeValidationDocument(int $index): void
@@ -168,7 +225,7 @@ class StudentRequestComponent extends Component
             ->map(fn (array $course) => $courseLabels[(int) $course['courseId']] ?? (string) $course['courseId'])
             ->implode(', ');
 
-        foreach ($this->validationForm->toDtos($this->studentId()) as $dto) {
+        foreach ($this->validationForm->toDtos($this->studentId(), $courseLabels) as $dto) {
             $useCase->handle($dto);
         }
 
@@ -186,7 +243,26 @@ class StudentRequestComponent extends Component
         $request = $useCase->handle($id);
         $this->authorize('view', $request);
 
-        $this->viewingRequest = $this->toRow($request, $this->courseLabelsById());
+        $courseLabels = $this->courseLabelsById();
+        $this->viewingRequest = $this->toRow($request, $courseLabels);
+
+        // Each course line from a Validation submission is its own
+        // independent Request — reviewed and resolved on its own by
+        // Docencia/Registro, potentially with a different outcome per
+        // course (see ValidationRequestForm's docblock). So "Ver" on one
+        // of them shows only that one course, not its siblings from the
+        // same submission — unlike the confirmation email, which does
+        // list every course together (see RequestSubmittedNotification).
+        // Table format kept (not the old stacked fields) for visual
+        // consistency even with a single row.
+        if ($request->type() === 'Validation') {
+            $this->viewingRequest['batchCourses'] = [[
+                'course' => $courseLabels[$request->courseId()] ?? (string) $request->courseId(),
+                'externalCourse' => $request->externalCourse(),
+                'originInstitution' => $request->originInstitution(),
+            ]];
+        }
+
         $this->showViewModal = true;
     }
 
@@ -206,6 +282,7 @@ class StudentRequestComponent extends Component
                 page: $this->page,
                 sortBy: $this->sortKey,
                 sortDir: $this->sortDir,
+                search: $this->search,
             );
 
             $courseLabels = $this->courseLabelsById();
@@ -325,6 +402,7 @@ class StudentRequestComponent extends Component
             'status' => $request->status(),
             'statusVariant' => $this->statusVariant($request->status()),
             'result' => $request->engineResult(),
+            'submittedAt' => $request->createdAt(),
             'estimatedDate' => $request->estimatedResolutionDate(),
             'originInstitution' => $request->originInstitution(),
             'externalCourse' => $request->externalCourse(),

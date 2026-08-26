@@ -24,6 +24,8 @@ final class RequestSubmittedNotification extends Notification implements ShouldQ
     public function __construct(
         private readonly Request $request,
         private readonly string $courseLabel,
+        private readonly ?string $documentName = null,
+        private readonly ?string $batchCourseNames = null,
     ) {}
 
     /**
@@ -34,20 +36,52 @@ final class RequestSubmittedNotification extends Notification implements ShouldQ
         return ['mail'];
     }
 
+    /**
+     * Same structure for both request types: confirmation line, then
+     * whatever's relevant (justification only exists for Requirement
+     * Waiver, so that line is skipped for Validation), attached
+     * document(s), the Docencia-then-Registro review order, and the
+     * "check My requests" recommendation.
+     */
     public function toMail(object $notifiable): MailMessage
     {
-        $type = $this->request->type() === 'Requirement Waiver'
-            ? __('requirement waiver request')
-            : __('course validation request');
+        $isWaiver = $this->request->type() === 'Requirement Waiver';
 
-        return (new MailMessage())
-            ->subject(__('We received your :type', ['type' => $type]))
+        // A Validation submission bundles several UTN courses into one
+        // or more independent Request rows (see RequestDTO's docblock on
+        // batchCourseNames) — the confirmation should list all of them,
+        // not just the single course this particular Request/email is
+        // for, so the student sees everything they just submitted.
+        $courseLabel = $isWaiver ? $this->courseLabel : ($this->batchCourseNames ?? $this->courseLabel);
+
+        $message = (new MailMessage())
+            ->subject($isWaiver
+                ? __('Requirement waiver request received')
+                : __('Course validation request received'))
             ->greeting(__('Hello :name,', ['name' => $notifiable->name]))
-            ->line(__('We successfully received your :type for :course.', [
-                'type' => $type,
-                'course' => $this->courseLabel,
-            ]))
-            ->line(__('Current status: :status', ['status' => __($this->request->status())]))
-            ->line(__('You can review the full detail from the "My requests" section of the portal.'));
+            ->line($isWaiver
+                ? __('The UTN confirms your requirement waiver request for :course was received.', ['course' => $courseLabel])
+                : __('The UTN confirms your course validation request for :course was received.', ['course' => $courseLabel]));
+
+        if ($this->request->createdAt() !== null) {
+            $message->line(__('Submission date: :date', [
+                'date' => date('Y-m-d', strtotime($this->request->createdAt())),
+            ]));
+        }
+
+        if ($this->request->waiverJustification() !== null) {
+            $message->line(__('Justification you selected: :justification', [
+                'justification' => __($this->request->waiverJustification()),
+            ]));
+        }
+
+        if ($this->documentName !== null) {
+            $message->line(__('Attached document: :document', ['document' => $this->documentName]));
+        }
+
+        return $message
+            ->line(__('Your request will be reviewed by Docencia and then by Registro of the UTN. You will be informed once it is ready.'))
+            ->line(__('Recommendation: keep track of your request status in the "My requests" inbox.'))
+            ->salutation(__('Regards,')."  \nUniversidad Técnica Nacional");
     }
 }

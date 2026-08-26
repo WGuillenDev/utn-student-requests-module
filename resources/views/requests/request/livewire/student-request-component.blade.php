@@ -1,4 +1,16 @@
-<div>
+<div x-data="{
+    confirmSubmit: { open: false, action: null },
+    askConfirmSubmit(action) {
+        this.confirmSubmit = { open: true, action };
+    },
+    runConfirmSubmit() {
+        $wire.call(this.confirmSubmit.action);
+        this.confirmSubmit.open = false;
+    },
+    closeConfirmSubmitModal() {
+        this.confirmSubmit.open = false;
+    },
+}">
     <div class="card" style="margin-bottom:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding:16px;">
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -23,7 +35,7 @@
         <div style="padding:16px; display:flex; flex-direction:column; gap:16px; max-width:640px;">
             <div class="form-field">
                 <label for="waiverCourse">{{ __('Course to enroll') }}</label>
-                <select id="waiverCourse" wire:model="waiverForm.courseId" class="{{ $errors->has('waiverForm.courseId') ? 'has-error' : '' }}">
+                <select id="waiverCourse" wire:model.live="waiverForm.courseId" class="{{ $errors->has('waiverForm.courseId') ? 'has-error' : '' }}">
                     <option value="">{{ __('Select a course') }}</option>
                     @foreach ($courseOptions as $option)
                     <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
@@ -34,7 +46,7 @@
 
             <div class="form-field">
                 <label for="waiverRequiredCourse">{{ __('Course requirement not met') }}</label>
-                <select id="waiverRequiredCourse" wire:model="waiverForm.requiredCourseId" class="{{ $errors->has('waiverForm.requiredCourseId') ? 'has-error' : '' }}">
+                <select id="waiverRequiredCourse" wire:model.live="waiverForm.requiredCourseId" class="{{ $errors->has('waiverForm.requiredCourseId') ? 'has-error' : '' }}">
                     <option value="">{{ __('Select a course') }}</option>
                     @foreach ($courseOptions as $option)
                     <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
@@ -101,7 +113,7 @@
             </div>
 
             <div>
-                <button type="button" class="btn btn-primary" wire:click="submitWaiver" wire:loading.attr="disabled" wire:target="submitWaiver,waiverForm.supportDocument">
+                <button type="button" class="btn btn-primary" @click="askConfirmSubmit('submitWaiver')" wire:loading.attr="disabled" wire:target="submitWaiver,waiverForm.supportDocument">
                     {{ __('Submit request') }}
                 </button>
             </div>
@@ -129,7 +141,7 @@
                     @foreach ($validationForm->courses as $index => $course)
                     <div class="data-row" wire:key="validation-course-row-{{ $index }}" style="align-items:start;">
                         <div class="form-field" style="margin:0;">
-                            <select wire:model="validationForm.courses.{{ $index }}.courseId" class="{{ $errors->has("validationForm.courses.$index.courseId") ? 'has-error' : '' }}">
+                            <select wire:model.live="validationForm.courses.{{ $index }}.courseId" class="{{ $errors->has("validationForm.courses.$index.courseId") ? 'has-error' : '' }}">
                                 <option value="">{{ __('Select a course') }}</option>
                                 @foreach ($courseOptions as $option)
                                 <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
@@ -186,7 +198,7 @@
             </div>
 
             <div>
-                <button type="button" class="btn btn-primary" wire:click="submitValidation" wire:loading.attr="disabled" wire:target="submitValidation,validationForm.documents">
+                <button type="button" class="btn btn-primary" @click="askConfirmSubmit('submitValidation')" wire:loading.attr="disabled" wire:target="submitValidation,validationForm.documents">
                     {{ __('Submit request') }}
                 </button>
             </div>
@@ -198,7 +210,7 @@
                 ['key' => 'type', 'label' => __('Type'), 'sortable' => true],
                 ['key' => 'course', 'label' => __('Course'), 'sortable' => false],
                 ['key' => 'status', 'label' => __('Status'), 'sortable' => true],
-                ['key' => 'estimated_resolution_date', 'label' => __('Estimated date'), 'sortable' => true],
+                ['key' => 'created_at', 'label' => __('Submission date'), 'sortable' => true],
             ]"
         mode="server"
         :rows="[]"
@@ -209,7 +221,7 @@
         :per-page="$perPage"
         table-cols="1.6fr 2fr 1.4fr 1.2fr 1fr"
         :can-create="false"
-        :can-search="false"
+        :can-search="true"
         :can-export-pdf="false"
         :can-export-excel="false"
         :title="__('My requests')">
@@ -225,7 +237,7 @@
             <span>
                 <span class="status-badge {{ $row['statusVariant'] }}">{{ __($row['status']) }}</span>
             </span>
-            <span>{{ $row['estimatedDate'] ?? '—' }}</span>
+            <span>{{ $row['submittedAt'] ? date('Y-m-d', strtotime($row['submittedAt'])) : '—' }}</span>
             <div class="actions-cell">
                 <x-ui.row-actions
                     :can-view="true"
@@ -240,6 +252,18 @@
     </x-ui.data-table>
     @endif
 
+    <div class="del-overlay" :class="{ 'open': confirmSubmit.open }">
+        <div class="del-card">
+            <div class="del-icon-warn">!</div>
+            <p class="del-title">{{ __('Warning') }}</p>
+            <p class="del-text">{{ __('Are you sure you want to submit this request?') }}</p>
+            <div class="del-actions">
+                <button type="button" class="del-btn-confirm" @click="runConfirmSubmit()">{{ __('Yes, submit') }}</button>
+                <button type="button" class="del-btn-cancel" @click="closeConfirmSubmitModal()">{{ __('Cancel') }}</button>
+            </div>
+        </div>
+    </div>
+
     <x-ui.success-modal :show="$showSuccessModal" :title="__('Request submitted!')" close-action="closeSuccessModal">
         <p>{{ __('Type') }}: {{ match ($successType) {
                 'Requirement Waiver' => __('Requirement Waiver'),
@@ -247,13 +271,11 @@
                 default => $successType,
             } }}</p>
         <p>{{ __('Course') }}: {{ $successCourse }}</p>
-        @if ($successEngineResult)
-        <p>{{ __('Immediate result') }}: <strong>{{ __($successEngineResult) }}</strong></p>
-        @endif
+        <p>{{ __('Immediate result') }}: <strong>{{ __('Submitted to Docencia') }}</strong></p>
         <span class="status-badge pending">{{ __('Pending Review') }}</span>
     </x-ui.success-modal>
 
-    <x-ui.modal :show="$showViewModal" :title="__('Request detail')" close-action="closeViewModal">
+    <x-ui.modal :show="$showViewModal" :title="__('Request detail')" close-action="closeViewModal" size="lg">
         @if ($viewingRequest)
         <div class="form-field">
             <label>{{ __('Type') }}</label>
@@ -263,11 +285,11 @@
                     default => $viewingRequest['type'],
                 } }}</p>
         </div>
+        @if ($viewingRequest['type'] === 'Requirement Waiver')
         <div class="form-field">
             <label>{{ __('Course') }}</label>
             <p>{{ $viewingRequest['course'] }}</p>
         </div>
-        @if ($viewingRequest['type'] === 'Requirement Waiver')
         <div class="form-field">
             <label>{{ __('Unmet requirement') }}</label>
             <p>{{ $viewingRequest['requiredCourse'] }}</p>
@@ -278,12 +300,23 @@
         </div>
         @else
         <div class="form-field">
-            <label>{{ __('Origin institution') }}</label>
-            <p>{{ $viewingRequest['originInstitution'] }}</p>
-        </div>
-        <div class="form-field">
-            <label>{{ __('External course name') }}</label>
-            <p>{{ $viewingRequest['externalCourse'] }}</p>
+            <label>{{ __('Courses to validate') }}</label>
+            <div class="table-scroll">
+                <div class="table-inner" style="--table-cols: 1.4fr 1.4fr 1.2fr;" role="table">
+                    <div class="data-row data-row-head" role="row">
+                        <span>{{ __('UTN course') }}</span>
+                        <span>{{ __('External course name') }}</span>
+                        <span>{{ __('Origin university') }}</span>
+                    </div>
+                    @foreach ($viewingRequest['batchCourses'] ?? [] as $batchCourse)
+                    <div class="data-row" role="row">
+                        <span>{{ $batchCourse['course'] }}</span>
+                        <span>{{ $batchCourse['externalCourse'] }}</span>
+                        <span>{{ $batchCourse['originInstitution'] }}</span>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
         </div>
         @endif
         <div class="form-field">
@@ -291,12 +324,8 @@
             <p><span class="status-badge {{ $viewingRequest['statusVariant'] }}">{{ __($viewingRequest['status']) }}</span></p>
         </div>
         <div class="form-field">
-            <label>{{ __('Result') }}</label>
-            <p>{{ $viewingRequest['result'] ? __($viewingRequest['result']) : __('Pending') }}</p>
-        </div>
-        <div class="form-field">
-            <label>{{ __('Estimated date') }}</label>
-            <p>{{ $viewingRequest['estimatedDate'] ?? '—' }}</p>
+            <label>{{ __('Submission date') }}</label>
+            <p>{{ $viewingRequest['submittedAt'] ? date('Y-m-d', strtotime($viewingRequest['submittedAt'])) : '—' }}</p>
         </div>
         @endif
     </x-ui.modal>

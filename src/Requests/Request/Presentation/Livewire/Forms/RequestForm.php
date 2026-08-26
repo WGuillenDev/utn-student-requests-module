@@ -52,7 +52,7 @@ class RequestForm extends Form
             'studentId' => ['required', 'integer', 'exists:students,id'],
             'type' => ['required', 'in:Requirement Waiver,Validation'],
             'courseId' => ['required', 'integer', 'exists:courses,id'],
-            'requiredCourseId' => ['required_if:type,Requirement Waiver', 'nullable', 'integer', 'exists:courses,id'],
+            'requiredCourseId' => ['required_if:type,Requirement Waiver', 'nullable', 'integer', 'exists:courses,id', 'different:courseId'],
             'originInstitution' => ['required_if:type,Validation', 'nullable', 'string', 'max:150'],
             'externalCourse' => ['required_if:type,Validation', 'nullable', 'string', 'max:150'],
             'supportDocument' => ['required_if:type,Requirement Waiver', 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],

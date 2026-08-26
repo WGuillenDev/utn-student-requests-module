@@ -59,7 +59,7 @@ class WaiverRequestForm extends Form
     {
         return [
             'courseId' => ['required', 'integer', 'exists:courses,id'],
-            'requiredCourseId' => ['required', 'integer', 'exists:courses,id'],
+            'requiredCourseId' => ['required', 'integer', 'exists:courses,id', 'different:courseId'],
             'justification' => ['required', 'string', 'in:'.implode(',', self::JUSTIFICATIONS)],
             'supportDocument' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'noticeAccepted' => ['accepted'],

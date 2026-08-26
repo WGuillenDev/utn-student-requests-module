@@ -51,6 +51,7 @@ interface RequestRepositoryInterface
         int $page,
         ?string $sortBy = null,
         string $sortDir = 'asc',
+        ?string $search = null,
     ): array;
 
     public function save(Request $request): Request;

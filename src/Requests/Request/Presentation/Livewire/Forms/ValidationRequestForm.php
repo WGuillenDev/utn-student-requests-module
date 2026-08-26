@@ -50,7 +50,7 @@ class ValidationRequestForm extends Form
     {
         return [
             'courses' => ['required', 'array', 'min:1', 'max:'.self::MAX_COURSES],
-            'courses.*.courseId' => ['required', 'integer', 'exists:courses,id'],
+            'courses.*.courseId' => ['required', 'integer', 'exists:courses,id', 'distinct'],
             'courses.*.externalCourse' => ['required', 'string', 'max:150'],
             'courses.*.originInstitution' => ['required', 'string', 'max:150'],
             'documents' => ['required', 'array', 'min:1'],
@@ -65,12 +65,25 @@ class ValidationRequestForm extends Form
      * more than one row, so each course line gets a fresh copy of the
      * shared uploads rather than reusing a single stored File.
      *
+     * Only the first DTO carries notify: true (see RequestDTO's
+     * docblock) — CreateRequestUseCase sends one email per DTO it's
+     * told to notify for, and this submission should produce exactly
+     * one confirmation email for the whole batch, not one per course.
+     *
+     * @param  array<int, string>  $courseLabels  UTN course id => display
+     *   label, used only to build each DTO's batchCourseNames (see
+     *   RequestDTO's docblock) — never persisted.
      * @return array<int, RequestDTO>
      */
-    public function toDtos(int $studentId): array
+    public function toDtos(int $studentId, array $courseLabels = []): array
     {
-        return array_map(
-            fn (array $course): RequestDTO => new RequestDTO(
+        $batchCourseNames = collect($this->courses)
+            ->map(fn (array $course) => $courseLabels[(int) $course['courseId']] ?? (string) $course['courseId'])
+            ->implode(', ');
+
+        return collect($this->courses)
+            ->values()
+            ->map(fn (array $course, int $index): RequestDTO => new RequestDTO(
                 studentId: $studentId,
                 type: 'Validation',
                 courseId: (int) $course['courseId'],
@@ -80,8 +93,9 @@ class ValidationRequestForm extends Form
                     fn (TemporaryUploadedFile $file) => $this->storeAttachment($file, self::DOCUMENT_TYPE),
                     $this->documents,
                 ),
-            ),
-            $this->courses,
-        );
+                batchCourseNames: $batchCourseNames,
+                notify: $index === 0,
+            ))
+            ->all();
     }
 }
